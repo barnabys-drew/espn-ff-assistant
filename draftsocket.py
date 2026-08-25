@@ -116,6 +116,28 @@ class DraftState:
             self.unknown[kind] = self.unknown.get(kind, 0) + 1
         return False
 
+    def seed(self, taken_ids, my_ids=()):
+        """Pre-load picks the socket never saw, read from the room's DOM.
+
+        The socket only carries what happens after connecting, so a board
+        started mid-draft is blind to everything before it. Seeded picks are
+        marked so they are distinguishable from ones actually observed, and a
+        later real SELECTED for the same player is treated as a duplicate
+        rather than a second pick.
+        """
+        added = 0
+        for pid in taken_ids:
+            if pid in self.taken:
+                continue
+            team = self.my_team_id if pid in set(my_ids) else None
+            self.taken[pid] = team
+            self.picks.append({"type": "SELECTED", "team_id": team,
+                               "player_id": pid, "slot": None,
+                               "member_id": None, "auto": None,
+                               "seeded": True})
+            added += 1
+        return added
+
     def feed(self, text):
         """Parse and apply a raw frame."""
         return self.apply(parse_frame(text))

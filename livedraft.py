@@ -16,6 +16,7 @@ import sys
 import time
 
 import draftpick
+import draftroom
 import draftsocket
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
@@ -183,6 +184,29 @@ def main():
         page.on("websocket", hook)
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
         print("Draft room open. Draft in THIS window.", flush=True)
+
+        # The socket only carries what happens from now on, so a board started
+        # mid-draft would believe nobody had been drafted. The room knows.
+        page.wait_for_timeout(6000)
+        known = [r["name"] for r in board.by_id.values()]
+        by_name = {r["name"]: pid for pid, r in board.by_id.items()}
+        try:
+            gone = draftroom.drafted_players(page, known)
+            mine = draftroom.my_roster_players(page, known)
+        except Exception as exc:
+            gone, mine = [], []
+            print(f"could not seed from the room: {type(exc).__name__}: {exc}",
+                  flush=True)
+        seeded = state.seed([by_name[n] for n in gone if n in by_name],
+                            [by_name[n] for n in mine if n in by_name])
+        if seeded:
+            print(f"seeded {seeded} picks already made "
+                  f"({len(mine)} of them yours) from the draft room.",
+                  flush=True)
+        else:
+            print("no prior picks found in the room — starting clean.",
+                  flush=True)
+        pending["dirty"] = True
 
         rows = board.value([])
         attempted = set()
