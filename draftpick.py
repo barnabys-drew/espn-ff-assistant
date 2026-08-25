@@ -67,15 +67,27 @@ def pick(page, player_name, dry_run=True, timeout_ms=6000):
 
     # The row for this player, so we do not press a DRAFT button belonging to
     # somebody else further down the list.
-    row = page.locator(f'tr:has-text("{player_name}")').first
+    # Scope to rows that actually carry a DRAFT control, so a name appearing
+    # in a pick-history panel cannot be mistaken for an available player.
+    row = page.locator(
+        f'tr:has-text("{player_name}"):has(button)').first
     if not row.count():
-        row = page.locator(f'[class*="row"]:has-text("{player_name}")').first
+        row = page.locator(
+            f'[class*="row"]:has-text("{player_name}"):has(button)').first
     if not row.count():
-        return False, f"no row found for {player_name!r} after searching"
+        return False, f"no draftable row for {player_name!r} after searching"
 
-    button = find_draft_button(page, within=row) or find_draft_button(page)
+    # The button must be inside this player's row. Falling back to a
+    # page-level DRAFT button looks like success but is not: when it is your
+    # turn there is always an enabled DRAFT button somewhere, so any row
+    # matched anywhere in the DOM -- pick history, a drafted list -- would pair
+    # with it and appear to work. Requiring it inside the row is what makes
+    # "already drafted" fail closed, since a drafted player has no draftable
+    # row in the available list.
+    button = find_draft_button(page, within=row)
     if not button:
-        return False, "found the player but no enabled DRAFT button"
+        return False, (f"{player_name} has no draftable row — already taken, "
+                       f"or not in the available list")
 
     if dry_run:
         return True, f"DRY RUN — would click DRAFT for {player_name}"
