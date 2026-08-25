@@ -99,6 +99,11 @@ LEAGUE_TITLE_SELECTORS = [
     'header',
 ]
 
+# The browser tab is titled "Fantasy Football Draft - ESPN" regardless of
+# league, so anything this generic is the site name rather than a league and
+# must not be treated as a reading.
+GENERIC_TITLES = {"espn", "fantasy football", "fantasy football draft", ""}
+
 
 def room_league_name(page):
     """The league name the draft room is actually showing, or "".
@@ -107,15 +112,23 @@ def room_league_name(page):
     is the only cheap way to tell whether the window in front of you is the
     draft you passed on the command line.
     """
-    for getter in (lambda: page.title(),
-                   lambda: panel_text(page, LEAGUE_TITLE_SELECTORS)):
+    # The in-page header carries the real name -- "ESPN Fantasy Football Draft
+    # - New York Pro H2H Points PPR League" -- so it is read before the tab
+    # title, which is generic.
+    for getter in (lambda: panel_text(page, LEAGUE_TITLE_SELECTORS),
+                   lambda: page.inner_text("body", timeout=4000)[:400],
+                   lambda: page.title()):
         try:
-            text = getter() or ""
+            text = (getter() or "").strip()
         except Exception:
             continue
-        match = re.search(r"Draft\s*[-–]\s*(.+)$", text.strip())
-        if match:
-            return match.group(1).strip()
+        for line in text.splitlines():
+            match = re.search(r"Draft\s*[-\u2013]\s*(.+)$", line.strip())
+            if not match:
+                continue
+            name = match.group(1).strip()
+            if normalise(name) not in GENERIC_TITLES and len(name) > 4:
+                return name
     return ""
 
 

@@ -343,6 +343,46 @@ dumps can carry league-member names.
   report (the optimiser run against your roster alone, showing who to bench)
   and a trade evaluator (lineup gain for both sides of a proposal).
 
+**Own projections** (future, large)
+
+Everything here is a value lens over ESPN's `projected_total_points`. VOR, NEED
+and tiers are all downstream of it, and none of them ever question it — the
+board is only ever as good as that one number, from one source.
+
+Generating projections instead is a different and much harder project, and the
+hard part is data rather than maths. ESPN gives projections and box scores,
+which is thin; the predictive signal lives in target share, air yards, snap
+share, route participation and red-zone touches. `nflverse` / `nflfastR` is the
+public source for that.
+
+Where Bayesian methods genuinely fit, rather than as decoration:
+
+- **Posterior distributions rather than point estimates.** VOR on a mean throws
+  away information that matters: a player projected 250 with wide variance and
+  one projected 250 with a tight band are different assets — a ceiling play
+  when you are an underdog, a floor play when you are favoured. The board
+  currently cannot tell them apart.
+- **Hierarchical pooling** toward position and archetype priors, which is the
+  principled fix for small samples: rookies, injury returns, a receiver who had
+  three good games. Naive projections overreact to those.
+- **Sequential updating in-season** — prior is the preseason projection,
+  evidence is each week, posterior is the updated belief. The most natural fit
+  of the three, and it feeds the waiver and start/sit tools directly.
+
+Two notes on sequencing. Build the in-season updating *before* preseason
+projections: there is weekly feedback to validate against, the waiver tool
+benefits immediately, and a season of calibration beats guessing. And a
+half-built projection model is worse than ESPN's, because it would be trusted —
+so this stays off the draft-night path until it earns its place.
+
+Cheap first step, high leverage: **regress touchdowns toward expected TDs given
+opportunity.** TD rate is enormously noisy year to year and raw projections bake
+last season's in as though it were a skill. Small model, well-known edge.
+
+Also cheap and immediately useful: **floor/ceiling columns** from historical
+week-to-week variance, which would let the board say something it currently
+cannot.
+
 **Live draft** (stretch, experimental)
 - `espn-api` has no draft websocket — only `refresh_draft()`, which reads
   completed picks. Real-time board state needs browser automation.
