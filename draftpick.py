@@ -61,33 +61,47 @@ def pick(page, player_name, dry_run=True, timeout_ms=6000):
         search.click()
         search.fill("")
         search.type(player_name, delay=25)
-        page.wait_for_timeout(1200)
+        # Typing alone does not always commit the filter, and an uncommitted
+        # search leaves the full list on screen -- where the intended player
+        # may not be visible at all.
+        search.press("Enter")
+        page.wait_for_timeout(1500)
     except Exception as exc:
         return False, f"search failed: {type(exc).__name__}: {exc}"
 
     # The row for this player, so we do not press a DRAFT button belonging to
     # somebody else further down the list.
-    # Scope to rows that actually carry a DRAFT control, so a name appearing
-    # in a pick-history panel cannot be mistaken for an available player.
-    row = page.locator(
-        f'tr:has-text("{player_name}"):has(button)').first
-    if not row.count():
-        row = page.locator(
-            f'[class*="row"]:has-text("{player_name}"):has(button)').first
-    if not row.count():
-        return False, f"no draftable row for {player_name!r} after searching"
+    # Rows must carry their own DRAFT control. A page-level fallback would
+    # look like success but is not: while it is your turn there is always an
+    # enabled DRAFT button somewhere, so a name matched anywhere in the DOM --
+    # pick history, a drafted list -- would pair with it. Requiring the button
+    # inside the row is what makes "already drafted" fail closed.
+    #
+    # Several row shapes are tried because ESPN's list is not plain <tr>s
+    # everywhere, and being too strict here silently stops the picker.
+    row, tried = None, []
+    for selector in (f'tr:has-text("{player_name}"):has(button)',
+                     f'[class*="Table__TR"]:has-text("{player_name}"):has(button)',
+                     f'[class*="row"]:has-text("{player_name}"):has(button)',
+                     f'li:has-text("{player_name}"):has(button)',
+                     f'div:has-text("{player_name}"):has(button)'):
+        try:
+            candidate = page.locator(selector).last
+            if candidate.count():
+                row, _ = candidate, tried.append(selector)
+                break
+        except Exception:
+            continue
+        tried.append(selector)
+    if row is None:
+        return False, (f"no draftable row for {player_name!r} "
+                       f"(tried {len(tried)} row shapes) — already taken, "
+                       f"or the list did not filter")
 
-    # The button must be inside this player's row. Falling back to a
-    # page-level DRAFT button looks like success but is not: when it is your
-    # turn there is always an enabled DRAFT button somewhere, so any row
-    # matched anywhere in the DOM -- pick history, a drafted list -- would pair
-    # with it and appear to work. Requiring it inside the row is what makes
-    # "already drafted" fail closed, since a drafted player has no draftable
-    # row in the available list.
     button = find_draft_button(page, within=row)
     if not button:
-        return False, (f"{player_name} has no draftable row — already taken, "
-                       f"or not in the available list")
+        return False, (f"{player_name}: found a row but no enabled DRAFT "
+                       f"button inside it")
 
     if dry_run:
         return True, f"DRY RUN — would click DRAFT for {player_name}"

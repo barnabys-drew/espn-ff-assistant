@@ -12,6 +12,8 @@ league API still lists drafted players as free agents, so re-polling would
 actively make the pool worse.
 """
 import argparse
+import datetime
+import os
 import sys
 import time
 
@@ -95,6 +97,18 @@ class Board:
             # slots still empty.
             board.sort(key=lambda r: (-r.get("need", 0), -r["vor"]))
         return board
+
+
+LOG_PATH = "out/livedraft.log"
+
+
+def log(message):
+    """Autopick attempts scroll away between screen redraws in a couple of
+    seconds, which leaves a draft-night failure with no evidence at all."""
+    os.makedirs("out", exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%H:%M:%S")
+    with open(LOG_PATH, "a") as fh:
+        fh.write(f"{stamp}  {message}\n")
 
 
 def render(board, state, rows, top, teams):
@@ -252,13 +266,17 @@ def main():
                                 break
                             print(f">>> skipping {candidate['name']}: {msg}",
                                   flush=True)
+                            log(f"SKIP {candidate['name']}: {msg}")
                         print(f"\n>>> AUTOPICK {target['name'] if target else '?'}"
                               f": {msg}", flush=True)
+                        log(f"AUTOPICK {target['name'] if target else '?'}"
+                            f" armed={args.arm} ok={ok}: {msg}")
                         if ok and args.arm:
                             page.wait_for_timeout(2500)
                             good, detail = draftpick.confirm_via_socket(
                                 state, target["player_id"], team.team_id)
                             print(f">>> {detail}", flush=True)
+                            log(f"CONFIRM ok={good}: {detail}")
                             if not good:
                                 print(">>> disarming after an unconfirmed "
                                       "pick", flush=True)
