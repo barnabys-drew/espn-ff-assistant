@@ -1,6 +1,6 @@
 """Live draft board, driven by the draft room's own websocket.
 
-Run:  .venv/bin/python livedraft.py --league-id 1733486153
+Run:  .venv/bin/python livedraft.py --league-id <LEAGUE_ID>
 
 This owns the browser. ESPN allows one draft connection per member, so a second
 one displaces the first -- which means the board cannot watch your draft room
