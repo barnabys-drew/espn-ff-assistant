@@ -75,10 +75,17 @@ def scoring_weeks(league, week):
 def build(league, team, weeks, depth, only_pos, limit):
     roster = [as_row(p, weeks) for p in team.roster]
 
-    free_agents = []
+    free_agents, covered = [], set()
     for pos in ([only_pos] if only_pos else POSITIONS):
         for p in league.free_agents(week=weeks[0], size=depth.get(pos, 50),
                                     position=pos):
+            # Which of the weeks we are valuing over actually carry a
+            # projection. ESPN does not always publish future weeks, and a
+            # rest-of-season number summed over one week of data is a
+            # rest-of-season number in name only.
+            stats = getattr(p, "stats", None) or {}
+            covered.update(w for w in weeks
+                           if (stats.get(w) or {}).get("projected_points"))
             row = as_row(p, weeks)
             if row["proj"] > 0:
                 free_agents.append(row)
@@ -97,6 +104,7 @@ def build(league, team, weeks, depth, only_pos, limit):
         "faab_spent": getattr(team, "acquisition_budget_spent", None),
         "waiver_rank": getattr(team, "waiver_rank", None),
         "free_agents_considered": len(free_agents),
+        "weeks_with_data": sorted(covered),
         "adds": ranked,
     }
 
@@ -126,6 +134,12 @@ def report(data):
         d = data["drop_candidate"]
         print(f"Weakest bench player:         {d['name']} ({d['pos']}, "
               f"{d['proj']:.1f}) — the default drop")
+    have = data.get("weeks_with_data") or []
+    if len(have) < len(weeks):
+        missing = len(weeks) - len(have)
+        print(f"! Only {len(have)} of {len(weeks)} weeks carry projections "
+              f"(missing {missing}). ESPN has not published the rest, so these "
+              f"totals cover weeks {have or ['none']} only, not {window}.")
     if data["waiver_rank"]:
         print(f"Waiver priority:              #{data['waiver_rank']}")
     if data["faab_spent"] is not None:

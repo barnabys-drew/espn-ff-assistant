@@ -3,9 +3,10 @@
 Personal tooling for drafting and managing a private ESPN fantasy football team.
 Built for the 2026 season.
 
-> **Status:** pre-draft. Auth, league probing, and the value-over-replacement
-> draft board are built; the board's math is unit-tested but has not yet been
-> run against the live league. Nothing here writes to the league.
+> **Status:** pre-draft, and now **verified against the live league**. Auth,
+> probing, the draft board, live pick reading and the waiver wire all run
+> against real data; a full board builds in **~3.7s**, which is what makes it
+> usable on a pick clock. Nothing here writes to the league.
 
 ## Why this exists
 
@@ -86,9 +87,16 @@ between tiers, take the player.
 Two things worth knowing about the inputs:
 
 - ESPN's `projected_total_points` is already scored by *your* league's rules
-  when fetched in league context, so no re-scoring happens here. The board is
-  only as good as ESPN's projections — it is a value lens over them, not an
-  independent forecast.
+  when fetched in league context, so no re-scoring happens here. **This is
+  verified, not assumed:** reconstructing projections from the stat breakdown
+  under standard, half-PPR and full-PPR scoring matches ESPN's number to within
+  0.1 points under half-PPR — this league's actual `REC` value of 0.5 — and
+  misses by 25-60 points under the other two. The board is still only as good
+  as ESPN's projections: it is a value lens over them, not an independent
+  forecast.
+- **Only week 1 carries per-week projections** pre-season; `player_info`
+  carries none at all. Anything summing a week range says so when the data is
+  not there, rather than presenting a one-week number as a season total.
 - The pool is every undrafted player, so `draft.py` also works **mid-draft** as
   a best-available sheet.
 

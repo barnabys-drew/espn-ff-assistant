@@ -27,7 +27,7 @@ import time
 
 import picks as picks_mod
 import schedule as schedule_mod
-from common import connect, load_env
+from common import connect, find_my_team, load_env
 from lineup import (NON_STARTING_SLOTS, POOL_DEPTH, POSITIONS, as_row,
                     best_lineup, gain_from_adding, projection, starting_slots)
 
