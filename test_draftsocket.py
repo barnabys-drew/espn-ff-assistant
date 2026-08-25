@@ -44,10 +44,12 @@ class ParseFrame(unittest.TestCase):
         self.assertIsNone(f["member_id"])
         self.assertTrue(f["auto"])
 
-    def test_clock_is_round_millis_team(self):
+    def test_clock_carries_millis_and_team(self):
+        """The first field is not the round: it read 6 during round 2 as well
+        as during round 6, so it is carried uninterpreted."""
         self.assertEqual(
             draftsocket.parse_frame("CLOCK 6 59499 1"),
-            {"type": "CLOCK", "round": 6, "millis": 59499, "team_id": 1})
+            {"type": "CLOCK", "field1": 6, "millis": 59499, "team_id": 1})
 
     def test_selecting_names_the_team_on_the_clock(self):
         f = draftsocket.parse_frame("SELECTING 10 60000")
@@ -104,7 +106,13 @@ class State(unittest.TestCase):
     def test_clock_and_turn_track_the_latest_frame(self):
         st, _ = self.feed_all()
         self.assertEqual(st.on_the_clock, 10)
-        self.assertEqual(st.round, 6)
+
+    def test_round_is_derived_from_picks_not_from_the_clock_frame(self):
+        st, _ = self.feed_all()
+        self.assertEqual(st.round_number(10), 1)   # 5 picks, 10 teams
+        for i in range(20):
+            st.feed(f"SELECTED 1 {900000 + i} 1")
+        self.assertEqual(st.round_number(10), 3)   # 25 picks
 
     def test_my_picks_filters_to_my_team(self):
         st, _ = self.feed_all(my_team=1)

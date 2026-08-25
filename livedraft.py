@@ -15,6 +15,7 @@ import argparse
 import sys
 import time
 
+import draftpick
 import draftsocket
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
@@ -90,7 +91,7 @@ class Board:
         return board
 
 
-def render(board, state, rows, top):
+def render(board, state, rows, top, teams):
     my_rows = [board.by_id[p] for p in state.my_picks if p in board.by_id]
     show_need = bool(my_rows)
 
@@ -99,7 +100,8 @@ def render(board, state, rows, top):
     clock = f"{state.seconds_left:.0f}s" if state.seconds_left is not None else "--"
     turn = ("*** YOU ARE ON THE CLOCK ***" if state.is_my_turn
             else f"team {state.on_the_clock} picking")
-    print(f"LIVE DRAFT  |  round {state.round or '?'}  |  "
+    rnd = state.round_number(teams) or "?"
+    print(f"LIVE DRAFT  |  round {rnd}  |  "
           f"{len(state.picks)} picks  |  {clock}  |  {turn}")
     print("=" * 96)
 
@@ -136,6 +138,13 @@ def main():
     ap.add_argument("--profile", default=".pwprofile",
                     help="browser profile to drive (needs the ESPN login)")
     ap.add_argument("--season", type=int, default=2026)
+    ap.add_argument("--autopick", type=int, metavar="SECS",
+                    help="draft the top NEED player when the clock drops "
+                         "below SECS on your turn. Dry run unless --arm is "
+                         "also given")
+    ap.add_argument("--arm", action="store_true",
+                    help="actually click DRAFT. Without this, --autopick only "
+                         "reports what it would have done")
     args = ap.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -176,9 +185,32 @@ def main():
         print("Draft room open. Draft in THIS window.", flush=True)
 
         rows = board.value([])
+        attempted = set()
         try:
             while True:
                 page.wait_for_timeout(700)
+
+                if args.autopick and state.is_my_turn and rows:
+                    left = state.seconds_left
+                    marker = len(state.picks)
+                    if (left is not None and left <= args.autopick
+                            and marker not in attempted):
+                        attempted.add(marker)
+                        target = rows[0]
+                        ok, msg = draftpick.pick(page, target["name"],
+                                                 dry_run=not args.arm)
+                        print(f"\n>>> AUTOPICK {target['name']}: {msg}",
+                              flush=True)
+                        if ok and args.arm:
+                            page.wait_for_timeout(2500)
+                            good, detail = draftpick.confirm_via_socket(
+                                state, target["player_id"], team.team_id)
+                            print(f">>> {detail}", flush=True)
+                            if not good:
+                                print(">>> disarming after an unconfirmed "
+                                      "pick", flush=True)
+                                args.arm = False
+                        page.wait_for_timeout(2500)
                 if pending["dirty"]:
                     for pick in state.picks:
                         board.remove(pick["player_id"])
@@ -186,7 +218,7 @@ def main():
                                if p in board.by_id]
                     rows = board.value(my_rows)
                     pending["dirty"] = False
-                render(board, state, rows, args.top)
+                render(board, state, rows, args.top, len(league.teams))
         except KeyboardInterrupt:
             print("\nStopped.")
         finally:

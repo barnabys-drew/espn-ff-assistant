@@ -12,7 +12,7 @@ The protocol is space-delimited text, not JSON:
 
     SELECTED <teamId> <playerId> <n> [<memberId>]   a pick was made
     SELECTING <teamId> <millis>                     that team is now on the clock
-    CLOCK <round> <millisRemaining> <teamId>        tick
+    CLOCK <?> <millisRemaining> <teamId>            tick
     AUTODRAFT <teamId> <true|false>                 that team is autopicking
     AUTOSUGGEST <playerId>                          ESPN's own suggestion
     PING / PONG / TOKEN / INIT                      housekeeping
@@ -55,7 +55,11 @@ def parse_frame(text):
     if kind == "SELECTING":
         return {"type": "SELECTING", "team_id": num(1), "millis": num(2)}
     if kind == "CLOCK":
-        return {"type": "CLOCK", "round": num(1), "millis": num(2),
+        # The first field is NOT the round. It read 6 in two different drafts,
+        # once during round 6 and once during round 2, so its meaning is
+        # unknown and it is carried without interpretation. Round is derived
+        # from the pick count instead, which is unambiguous.
+        return {"type": "CLOCK", "field1": num(1), "millis": num(2),
                 "team_id": num(3)}
     if kind == "AUTODRAFT":
         return {"type": "AUTODRAFT", "team_id": num(1),
@@ -81,7 +85,6 @@ class DraftState:
         self.taken = {}                # player_id -> team_id
         self.on_the_clock = None
         self.millis_left = None
-        self.round = None
         self.autodraft = {}            # team_id -> bool
         self.suggestion = None
         self.unknown = {}              # unhandled type -> count
@@ -103,7 +106,6 @@ class DraftState:
             self.on_the_clock = frame["team_id"]
             self.millis_left = frame["millis"]
         elif kind == "CLOCK":
-            self.round = frame["round"]
             self.millis_left = frame["millis"]
             self.on_the_clock = frame["team_id"]
         elif kind == "AUTODRAFT":
@@ -117,6 +119,12 @@ class DraftState:
     def feed(self, text):
         """Parse and apply a raw frame."""
         return self.apply(parse_frame(text))
+
+    def round_number(self, team_count):
+        """Round derived from picks made, since the socket does not say."""
+        if not team_count:
+            return None
+        return len(self.picks) // team_count + 1
 
     @property
     def my_picks(self):
@@ -135,7 +143,6 @@ class DraftState:
     def summary(self):
         return {
             "picks": len(self.picks),
-            "round": self.round,
             "on_the_clock": self.on_the_clock,
             "seconds_left": self.seconds_left,
             "is_my_turn": self.is_my_turn,
