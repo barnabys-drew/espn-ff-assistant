@@ -149,3 +149,51 @@ class RosterPanel(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LeagueGuard(unittest.TestCase):
+    """Twice in testing the board ran against the wrong draft and never said so."""
+
+    class Titled:
+        def __init__(self, title):
+            self._title = title
+
+        def title(self):
+            return self._title
+
+        def locator(self, selector):
+            class L:
+                def count(self):
+                    return 0
+            return L()
+
+    def name(self, title):
+        return draftroom.room_league_name(self.Titled(title))
+
+    def test_extracts_the_league_name_from_the_room_title(self):
+        self.assertEqual(
+            self.name("ESPN Fantasy Football Draft - Tampa Bay Pro H2H "
+                      "Points PPR League"),
+            "Tampa Bay Pro H2H Points PPR League")
+
+    def test_a_title_without_a_league_yields_nothing(self):
+        self.assertEqual(self.name("ESPN - Serving Sports Fans"), "")
+
+    def test_the_same_league_matches(self):
+        self.assertTrue(draftroom.leagues_match(
+            "Tampa Bay Pro H2H Points PPR League",
+            "Tampa Bay Pro H2H Points PPR League"))
+
+    def test_a_different_league_does_not_match(self):
+        """The exact failure seen live: drafting Tampa Bay, reading New England."""
+        self.assertFalse(draftroom.leagues_match(
+            "Tampa Bay Pro H2H Points PPR League",
+            "New England Pro H2H Points PPR League"))
+
+    def test_an_abbreviated_room_name_still_matches(self):
+        self.assertTrue(draftroom.leagues_match(
+            "Tampa Bay Pro H2H Points PPR League", "Tampa Bay Pro H2H"))
+
+    def test_an_unreadable_title_is_not_treated_as_a_mismatch(self):
+        """Failing to read the title is not evidence of the wrong league."""
+        self.assertTrue(draftroom.leagues_match("Some League", ""))

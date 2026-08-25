@@ -89,6 +89,11 @@ class Board:
             for r in board:
                 gain = gain_from_adding(my_rows, r, self.slots, base_total)
                 r["need"] = round(gain - repl.get(r["pos"], 0), 1)
+            # Once a roster exists, NEED is the better ranking and the one the
+            # board prints -- autopick takes rows[0], so the two must agree.
+            # VOR would keep offering a fourth running back with the QB and TE
+            # slots still empty.
+            board.sort(key=lambda r: (-r.get("need", 0), -r["vor"]))
         return board
 
 
@@ -188,6 +193,20 @@ def main():
         # The socket only carries what happens from now on, so a board started
         # mid-draft would believe nobody had been drafted. The room knows.
         page.wait_for_timeout(6000)
+
+        # Twice in testing the board ran against a different league than the
+        # one being drafted, and reported confidently the whole time. The room
+        # knows which draft it is showing, so ask it.
+        seen = draftroom.room_league_name(page)
+        if seen and not draftroom.leagues_match(league.settings.name, seen):
+            ctx.close()
+            sys.exit(f"Wrong draft room.\n  --league-id {args.league_id} is "
+                     f"{league.settings.name!r}\n  but the room is showing "
+                     f"{seen!r}.\nRe-run with the league id you are actually "
+                     f"drafting in.")
+        if seen:
+            print(f"room confirms: {seen}", flush=True)
+
         known = [r["name"] for r in board.by_id.values()]
         by_name = {r["name"]: pid for pid, r in board.by_id.items()}
         try:

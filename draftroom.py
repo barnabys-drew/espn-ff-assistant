@@ -93,6 +93,45 @@ def panel_text(page, selectors):
     return ""
 
 
+LEAGUE_TITLE_SELECTORS = [
+    '[class*="league-name"]',
+    '[class*="draft-header"]',
+    'header',
+]
+
+
+def room_league_name(page):
+    """The league name the draft room is actually showing, or "".
+
+    The room titles itself "ESPN Fantasy Football Draft - <league name>", which
+    is the only cheap way to tell whether the window in front of you is the
+    draft you passed on the command line.
+    """
+    for getter in (lambda: page.title(),
+                   lambda: panel_text(page, LEAGUE_TITLE_SELECTORS)):
+        try:
+            text = getter() or ""
+        except Exception:
+            continue
+        match = re.search(r"Draft\s*[-–]\s*(.+)$", text.strip())
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def leagues_match(expected, seen):
+    """Whether the room's league is the one we were pointed at.
+
+    Compared loosely -- the room may abbreviate or decorate the name -- but an
+    empty reading counts as a match, because failing to read the title is not
+    evidence of being in the wrong league.
+    """
+    if not seen or not expected:
+        return True
+    a, b = normalise(expected), normalise(seen)
+    return a in b or b in a
+
+
 def current_pick(page):
     """(round, overall_pick, team_on_the_clock) from the header, or Nones.
 
