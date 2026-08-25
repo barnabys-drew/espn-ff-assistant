@@ -26,9 +26,10 @@ import sys
 import time
 
 import picks as picks_mod
+import schedule as schedule_mod
 from common import connect, load_env
 from lineup import (NON_STARTING_SLOTS, POOL_DEPTH, POSITIONS, as_row,
-                    best_lineup, gain_from_adding, starting_slots)
+                    best_lineup, gain_from_adding, projection, starting_slots)
 
 
 def parse_slots(slot_counts, team_count):
@@ -115,7 +116,7 @@ def assign_tiers(players):
         players[i + 1]["tier"] = tier
 
 
-def fetch_pool(league, week, depth, taken=()):
+def fetch_pool(league, week, depth, taken=(), playoff=()):
     """Pull undrafted players per position, best projection first.
 
     `taken` is the set of player ids already drafted, subtracted here as a
@@ -133,6 +134,11 @@ def fetch_pool(league, week, depth, taken=()):
                 continue
             row = as_row(p, None)
             row["pos"] = pos  # trust the query, not the player's own label
+            if playoff:
+                # Season totals say nothing about the weeks that decide the
+                # title. Whether the payload carries them is checked by the
+                # caller rather than assumed here.
+                row["po"] = round(projection(p, playoff), 1)
             if row["proj"] <= 0:  # unprojected: practice squad, retired, dupes
                 skipped += 1
                 continue
@@ -168,7 +174,13 @@ def build(league, week, depth, my_team_id=None, by_need=False):
 
     drafted, draft_complete = picks_mod.fetch_picks(league)
     taken = picks_mod.taken_ids(drafted)
-    pool, skipped, stale = fetch_pool(league, week, depth, taken)
+    playoff = schedule_mod.playoff_weeks(league)
+    pool, skipped, stale = fetch_pool(league, week, depth, taken, playoff)
+
+    # Playoff projections only exist if the free-agent payload carried
+    # per-week numbers. If it did not, every value is zero and the column
+    # would be a lie, so it is dropped rather than shown empty.
+    playoff_ready = any(p.get("po") for players in pool.values() for p in players)
 
     base, flex = parse_slots(getattr(settings, "position_slot_counts", {}), team_count)
     startable = allocate_flex(pool, base, flex)
@@ -214,6 +226,15 @@ def build(league, week, depth, my_team_id=None, by_need=False):
     else:
         base_total = None
 
+    # Byes come from the pro schedule: a free agent's own schedule covers only
+    # the week it was fetched for, so it cannot show a bye.
+    reg_season = int(getattr(settings, "reg_season_count", 0) or 17)
+    byes = schedule_mod.fetch_bye_weeks(league, reg_season)
+    my_bye_load = schedule_mod.bye_load(my_rows, byes)
+    for player in board:
+        player["bye"] = byes.get(player["team"])
+        player["bye_clash"] = my_bye_load.get(player["bye"], 0) if player["bye"] else 0
+
     for i, player in enumerate(board, 1):
         player["rank"] = i
 
@@ -229,6 +250,9 @@ def build(league, week, depth, my_team_id=None, by_need=False):
         "my_roster": my_rows,
         "my_lineup_total": base_total,
         "sorted_by": "need" if (by_need and my_rows) else "vor",
+        "playoff_weeks": playoff,
+        "playoff_ready": playoff_ready,
+        "byes_known": bool(byes),
         "startable": startable,
         "replacement": {k: round(v, 1) for k, v in levels.items()},
         "unprojected_skipped": skipped,
@@ -237,18 +261,30 @@ def build(league, week, depth, my_team_id=None, by_need=False):
     }
 
 
-def format_row(p, show_need=False):
+def bye_cell(p):
+    """Bye week, with how many of your own players are already out that week."""
+    if not p.get("bye"):
+        return ""
+    clash = p.get("bye_clash") or 0
+    return f"{p['bye']}({clash})" if clash else str(p["bye"])
+
+
+def format_row(p, show_need=False, show_po=False, show_bye=False):
     flag = f" {p['injury'][:3]}" if p["injury"] else ""
     need = f" {p.get('need', 0.0):>+7.1f}" if show_need else ""
-    return (f"{p['rank']:>4}  {p['name'][:22]:<22} {p['pos']:<5} {p['team']:<4} "
-            f"{p['proj']:>7.1f} {p['vor']:>+7.1f}{need}   T{p['tier']:<3} "
-            f"{p['owned']:>5.1f}%{flag}")
+    po = f" {p.get('po', 0.0):>7.1f}" if show_po else ""
+    bye = f" {bye_cell(p):>5}" if show_bye else ""
+    return (f"{p['rank']:>4}  {p['name'][:22]:<22} {p['pos']:<5} {p['team']:<4}"
+            f"{bye} {p['proj']:>7.1f} {p['vor']:>+7.1f}{need}{po}   "
+            f"T{p['tier']:<3} {p['owned']:>5.1f}%{flag}")
 
 
-def header(show_need=False):
+def header(show_need=False, show_po=False, show_bye=False):
     need = f" {'NEED':>7}" if show_need else ""
-    return (f"{'#':>4}  {'PLAYER':<22} {'POS':<5} {'TM':<4} {'PROJ':>7} "
-            f"{'VOR':>7}{need}   {'TIER':<4} {'OWN':>6}")
+    po = f" {'PLAYOFF':>7}" if show_po else ""
+    bye = f" {'BYE':>5}" if show_bye else ""
+    return (f"{'#':>4}  {'PLAYER':<22} {'POS':<5} {'TM':<4}{bye} {'PROJ':>7} "
+            f"{'VOR':>7}{need}{po}   {'TIER':<4} {'OWN':>6}")
 
 
 def roster_summary(rows):
@@ -262,6 +298,9 @@ def roster_summary(rows):
 
 def report(data, top, only_pos):
     show_need = bool(data["my_roster"])
+    show_po = bool(data.get("playoff_ready"))
+    show_bye = bool(data.get("byes_known"))
+    cols = dict(show_need=show_need, show_po=show_po, show_bye=show_bye)
     print("=" * 86)
     print(f"DRAFT BOARD — {data['league']} ({data['season']}), "
           f"{data['team_count']} teams")
@@ -297,9 +336,9 @@ def report(data, top, only_pos):
     if not only_pos:
         by = "NEED" if data["sorted_by"] == "need" else "VOR"
         print(f"\n--- OVERALL, TOP {top} BY {by} ---")
-        print(header(show_need))
+        print(header(**cols))
         for p in data["board"][:top]:
-            print(format_row(p, show_need))
+            print(format_row(p, **cols))
 
     for pos in ([only_pos] if only_pos else POSITIONS):
         players = data["by_position"].get(pos, [])
@@ -307,14 +346,26 @@ def report(data, top, only_pos):
             continue
         limit = top if only_pos else max(12, data["startable"].get(pos, 0) + 6)
         print(f"\n--- {pos} TIERS ---")
-        print(header(show_need))
+        print(header(**cols))
         last_tier = None
         for p in players[:limit]:
             if last_tier is not None and p["tier"] != last_tier:
                 print(f"{'':>4}  {'-' * 60}")
-            print(format_row(p, show_need))
+            print(format_row(p, **cols))
             last_tier = p["tier"]
 
+    if show_bye:
+        print("\nBYE = bye week; (n) is how many players you already roster "
+              "are out that week.")
+    if show_po:
+        weeks = data.get("playoff_weeks") or []
+        print(f"PLAYOFF = projected points over weeks "
+              f"{weeks[0]}-{weeks[-1]}, when the title is decided.")
+    elif data.get("playoff_weeks"):
+        print(f"\n(Playoff weeks {data['playoff_weeks'][0]}-"
+              f"{data['playoff_weeks'][-1]} identified, but the free-agent "
+              f"payload carried no per-week projections, so PLAYOFF is hidden "
+              f"rather than shown as zeros.)")
     if show_need:
         print("\nNEED = value over the player you would otherwise end up with "
               "in that slot,\ngiven what you have already drafted. It equals "

@@ -118,6 +118,27 @@ the entire duration of a live draft — it works on a finished season, which is
 what makes the gap easy to miss. `picks.py` reads the same payload and parses
 picks regardless.
 
+Two columns come from the league calendar rather than from projections:
+
+- **BYE** is the player's bye week, with `(n)` for how many players you already
+  roster are out that same week. `9(2)` means drafting him puts a third body on
+  your week-9 bye.
+- **PLAYOFF** is projected points over the weeks your league actually plays its
+  playoffs, derived from the matchup periods past `reg_season_count` and capped
+  by bracket size. Season totals say nothing about the weeks that decide the
+  title.
+
+Bye weeks come from the pro-schedule endpoint, not from player objects:
+`free_agents()` builds its players with `_get_pro_schedule(week)` — a single
+week — so a free agent's own `schedule` covers one week and cannot show a bye.
+A pro team missing more than one week is treated as an incomplete schedule and
+skipped, since a wrong bye week is worse than none.
+
+> PLAYOFF depends on the free-agent payload carrying per-week projections,
+> which is **unverified**. If it does not, every value would be zero, so the
+> column hides itself and says why rather than printing a column of fabricated
+> zeros.
+
 With your team identified (automatically from your `SWID`, or `--team-id`) the
 board adds a **NEED** column: value over the player you would otherwise end up
 with in that slot, given what you have already drafted. It equals VOR while
@@ -265,9 +286,11 @@ dumps can carry league-member names.
 | `draft.py` | VOR draft board, tiers, cheat sheet, live `--watch` board |
 | `waivers.py` | Waiver wire ranked by lineup gain |
 | `picks.py` | Live draft picks, which `espn-api` will not read |
+| `schedule.py` | Bye weeks and playoff weeks from the league calendar |
 | `lineup.py` | Shared roster math: projections and the lineup optimiser |
 | `common.py` | `.env` loading, league connection, finding your team |
 | `test_draft.py` | Unit tests for the valuation math and the live board |
 | `test_waivers.py` | Unit tests for the lineup optimiser and gain ranking |
 | `test_picks.py` | Unit tests for live pick reading |
+| `test_schedule.py` | Unit tests for bye and playoff week derivation |
 | `.env.example` | Template; copy to `.env` |
