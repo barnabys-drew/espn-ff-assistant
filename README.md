@@ -197,6 +197,89 @@ print the league's teams and ask for `--team-id`.
 Injured players are flagged, not filtered — `QUE`/`OUT` shows in the row and the
 call is yours.
 
+
+### 5. Draft night: the live board
+
+```bash
+.venv/bin/python livedraft.py --league-id <ID>              # board only
+.venv/bin/python livedraft.py --league-id <ID> --autopick 15 # dry run
+.venv/bin/python livedraft.py --league-id <ID> --autopick 15 --arm
+```
+
+**This opens the draft room and you draft in its window.** That is not a
+preference. ESPN permits one draft connection per member, and a second one
+displaces the first with "Duplicate Connection", so a board cannot watch your
+draft room from the side — it has to be your draft room.
+
+#### Why the league API is useless here
+
+During a live draft the league API is not lagging, it is blind. Measured
+against a real mock, mid-draft:
+
+| Source | What it said |
+|---|---|
+| `draftDetail.picks` | all 160 slots at `playerId: -1` |
+| `free_agents()` | still offered a player *this account had drafted* |
+| `team.roster` | 0 players, for a team holding six |
+
+The draft never touches `lm-api-reads`. It runs on a separate service:
+
+```
+wss://fantasydraft.espn.com/game-1/league-<id>/JOIN?...
+```
+
+so `livedraft.py` reads that socket instead. The protocol is space-delimited
+text, decoded in `draftsocket.py`:
+
+```
+SELECTED <teamId> <playerId> <n> [<memberId>]   a pick was made
+SELECTING <teamId> <millis>                     that team is on the clock
+CLOCK <?> <millisRemaining> <teamId>            tick
+AUTODRAFT <teamId> <true|false>                 that team is autopicking
+```
+
+The trailing member id appears only on human picks, so its absence marks an
+autopick. `CLOCK`'s first field is **not** the round — it read `6` during round
+2 and during round 6 — so it is carried uninterpreted and the round comes from
+the header strip instead.
+
+The player pool is fetched once at startup and maintained from socket picks
+rather than re-polled, because re-polling would actively make it worse.
+
+#### Autopick
+
+`--autopick SECS` drafts your top NEED player when the clock drops below `SECS`
+on your turn. It is worth having because ESPN's own autodraft is measurably
+worse — it offered De'Von Achane at +90.7 VOR with McCaffrey sitting there at
++140.4.
+
+It is a **dry run unless `--arm`** is passed, and a dry run stops immediately
+before the click with everything else already located, so a dry run that fails
+proves the real one would have.
+
+Four things make it safe:
+
+- **The room rejects stale candidates.** Its player list excludes drafted
+  players, so someone already gone has no row to find and the pick fails rather
+  than misfiring. Autopick walks down the board until the room accepts a
+  candidate — so it cannot draft a player who is gone even when it does not
+  know who is.
+- **No DRAFT button exists off-turn** — only a "Draft Help" link — so it cannot
+  fire when it is not your pick.
+- **One attempt per pick**, keyed on the pick count, so a slow page cannot
+  double-draft.
+- **The socket must confirm the player intended.** A click is half a pick; if
+  the draft service reports someone else, the tool disarms rather than firing
+  again.
+
+#### Known gap
+
+The socket carries no history, so a board started mid-draft, or restarted, has
+not seen earlier picks. Your own roster is re-read from the room at startup, but
+other teams' earlier picks are not — the board says so rather than looking
+authoritative, and autopick's fall-through covers the risk. **Start the board
+before the draft** and this never arises.
+
 ## Tests
 
 ```bash
@@ -293,12 +376,19 @@ dumps can carry league-member names.
 | `probe.py` | Dumps league scoring, roster slots, teams |
 | `draft.py` | VOR draft board, tiers, cheat sheet, live `--watch` board |
 | `waivers.py` | Waiver wire ranked by lineup gain |
-| `picks.py` | Live draft picks, which `espn-api` will not read |
+| `livedraft.py` | Draft-night board driven by the draft room websocket |
+| `draftsocket.py` | The live draft protocol, and draft state |
+| `draftroom.py` | Reading roster and header state out of the room's DOM |
+| `draftpick.py` | Clicking DRAFT for a named player |
+| `draftclock.py` | Countdown, snake order, when your next pick lands |
+| `picks.py` | Completed-draft picks (empty during a live draft) |
 | `schedule.py` | Bye weeks and playoff weeks from the league calendar |
 | `lineup.py` | Shared roster math: projections and the lineup optimiser |
 | `common.py` | `.env` loading, league connection, finding your team |
 | `test_draft.py` | Unit tests for the valuation math and the live board |
 | `test_waivers.py` | Unit tests for the lineup optimiser and gain ranking |
-| `test_picks.py` | Unit tests for live pick reading |
+| `test_picks.py` | Unit tests for completed-draft pick reading |
+| `test_draftsocket.py` | Protocol tests, against frames captured live |
+| `test_draftroom.py` | Tests for DOM name matching |
 | `test_schedule.py` | Unit tests for bye and playoff week derivation |
 | `.env.example` | Template; copy to `.env` |
