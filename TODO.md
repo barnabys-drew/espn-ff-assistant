@@ -5,7 +5,7 @@ Draft is the week of **2026-08-31**.
 
 ---
 
-## P0 — before draft night
+## P0 — before draft night  *(all closed 2026-08-25)*
 
 Everything here is either a correctness bug in something already relied on, or
 a gap that would only be discovered live.
@@ -19,18 +19,23 @@ to `NEED +0.0` while VOR still reads `+140`, because nobody can crack the
 lineup. The degradation is by construction, and it lasts longer than expected
 simply because slots stay open for many rounds.
 
-**2. Autopick attempts are not logged anywhere.**
+**2. ~~Autopick attempts are not logged~~ — done.**
+Every attempt, skip and socket confirmation now goes to `out/livedraft.log`.
+Originally:
 They print between screen redraws and are gone in ~2.5 seconds, so a failure
 during a real draft leaves no evidence. Write every attempt, outcome and socket
 confirmation to a file. Small, and it is the difference between diagnosing a
 draft-night failure and guessing at it.
 
-**3. Back-to-back picks are untested.**
+**3. ~~Back-to-back picks untested~~ — proven.**
+Fired independently 63 seconds apart at a snake turn, both confirmed.
+Originally:
 At a snake turn you pick twice in a row. The one-attempt-per-pick guard keys on
 the pick count, so the second should fire independently — but it has never been
 observed, and a turn is exactly where it would fail.
 
-**4. One clean armed run, start to finish.**
+**4. ~~One clean armed run~~ — done.**
+Five picks, five socket confirmations, no failures. Originally:
 Board started before the draft, correct league, `--arm`, all sixteen rounds.
 Everything below P0 assumes this works.
 
@@ -48,9 +53,15 @@ answered. Blocks 6 and 7.
 The lineup optimiser already exists; this is it run against your own roster,
 showing who to bench. Cheapest real feature left.
 
-**7. Bye and playoff columns on the live board.**
-Both exist in the static board and were left out of the live path for startup
-speed. Worth adding back once draft night is done.
+**7. ~~Bye handling on the live board~~ — done, and it mattered.**
+Autopick drafted two running backs onto the same week-13 bye, because the live
+board had no bye data at all. Byes now load at startup and, more importantly,
+**cost NEED**: a collision is priced at roughly one starter-week, since that
+week the slot must be filled from the bench regardless. Enough to flip a near
+tie, not enough to pass on a genuinely better player. `--bye-weight 0` disables.
+
+**7b. Playoff-week column on the live board.**
+Still missing, and still blocked on ESPN publishing per-week projections.
 
 ---
 

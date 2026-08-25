@@ -20,6 +20,7 @@ import time
 import draftpick
 import draftroom
 import draftsocket
+import schedule as schedule_mod
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
                     gain_from_adding, starting_slots)
@@ -29,13 +30,17 @@ from draft import allocate_flex, parse_slots, replacement_levels
 class Board:
     """The pool, valued, with drafted players removed as picks arrive."""
 
-    def __init__(self, league, my_team_id):
+    def __init__(self, league, my_team_id, bye_weight=1.0):
         self.league = league
         self.my_team_id = my_team_id
         self.slots = starting_slots(league.settings)
+        self.bye_weight = bye_weight
         self.by_id = {}
         self.pool = {}
         self._load()
+        weeks = int(getattr(league.settings, "reg_season_count", 0) or 17)
+        self.byes = schedule_mod.fetch_bye_weeks(league, weeks)
+        print(f"  bye weeks known for {len(self.byes)} pro teams.", flush=True)
 
     def _load(self):
         print("Fetching the player pool once (the API cannot be trusted "
@@ -88,9 +93,25 @@ class Board:
                     idx = min(startable.get(pos, 0), len(rows) - 1)
                     repl[pos] = gain_from_adding(my_rows, rows[idx],
                                                  self.slots, base_total)
+            # A bye collision costs roughly one starter-week: that week the
+            # slot has to be filled from the bench regardless of how good the
+            # player is the other sixteen. Scaled to a single game so it breaks
+            # ties rather than overriding real value -- passing on a much
+            # better player to dodge a bye is the worse mistake.
+            load = schedule_mod.bye_load(my_rows, self.byes)
+            games = max(1, len(self.league.settings.matchup_periods or {}) or 17)
             for r in board:
                 gain = gain_from_adding(my_rows, r, self.slots, base_total)
-                r["need"] = round(gain - repl.get(r["pos"], 0), 1)
+                need = gain - repl.get(r["pos"], 0)
+                r["bye"] = self.byes.get(r["team"])
+                r["bye_clash"] = load.get(r["bye"], 0) if r["bye"] else 0
+                if r["bye_clash"]:
+                    r["bye_cost"] = round(
+                        (r["proj"] / games) * r["bye_clash"] * self.bye_weight, 1)
+                    need -= r["bye_cost"]
+                else:
+                    r["bye_cost"] = 0.0
+                r["need"] = round(need, 1)
             # Once a roster exists, NEED is the better ranking and the one the
             # board prints -- autopick takes rows[0], so the two must agree.
             # VOR would keep offering a fourth running back with the QB and TE
@@ -136,17 +157,24 @@ def render(board, state, rows, top, teams):
         print("Just gone:   " + ", ".join(recent))
     print()
 
-    head = f"{'PLAYER':<24}{'POS':<5}{'TM':<5}{'BYE':>4}{'PROJ':>8}{'VOR':>8}"
+    head = f"{'PLAYER':<24}{'POS':<5}{'TM':<5}{'BYE':>6}{'PROJ':>8}{'VOR':>8}"
     print(head + (f"{'NEED':>8}" if show_need else ""))
     print("-" * (len(head) + (8 if show_need else 0)))
     for r in rows[:top]:
+        bye = ""
+        if r.get("bye"):
+            bye = (f"{r['bye']}({r['bye_clash']})" if r.get("bye_clash")
+                   else str(r["bye"]))
         line = (f"{r['name'][:23]:<24}{r['pos']:<5}{r['team']:<5}"
-                f"{'':>4}{r['proj']:>8.1f}{r['vor']:>+8.1f}")
+                f"{bye:>6}{r['proj']:>8.1f}{r['vor']:>+8.1f}")
         if show_need:
             line += f"{r.get('need', 0.0):>+8.1f}"
         print(line)
     if show_need:
-        print("\nNEED = value over whoever you would otherwise get in that slot.")
+        print("\nNEED = value over whoever you would otherwise get in that "
+              "slot, less a bye-collision cost.")
+        print("BYE  = bye week; (n) = players you already roster who are out "
+              "that week.")
     print(f"\n[{time.strftime('%H:%M:%S')}] Ctrl-C to stop.", flush=True)
 
 
@@ -162,6 +190,9 @@ def main():
                     help="draft the top NEED player when the clock drops "
                          "below SECS on your turn. Dry run unless --arm is "
                          "also given")
+    ap.add_argument("--bye-weight", type=float, default=1.0,
+                    help="how many starter-weeks a bye collision is treated as "
+                         "costing (0 disables bye penalties)")
     ap.add_argument("--arm", action="store_true",
                     help="actually click DRAFT. Without this, --autopick only "
                          "reports what it would have done")
@@ -178,7 +209,7 @@ def main():
     print(f"{league.settings.name}: you are team {team.team_id} "
           f"({team.team_name})", flush=True)
 
-    board = Board(league, team.team_id)
+    board = Board(league, team.team_id, bye_weight=args.bye_weight)
     state = draftsocket.DraftState(my_team_id=team.team_id)
     url = draftsocket.room_url(args.league_id, team.team_id, env["SWID"],
                                args.season)
