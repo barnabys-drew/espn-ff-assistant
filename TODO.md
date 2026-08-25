@@ -41,6 +41,23 @@ Everything below P0 assumes this works.
 
 ---
 
+**5b. ~~Tier cliffs against your next pick~~ — done.**
+A value board says who is best, never whether he will still be there. Tiers are
+now computed on the live board and paired with the snake order, so it reports
+"RB tier 1: 3 left" against "next pick 14 away" and flags the position as thin.
+Both halves already existed; only the joining was missing.
+
+**5c. ~~Roster position caps~~ — done.**
+`positionLimits` (QB 4 / RB 8 / WR 8 / TE 3 / K 3 / D/ST 3 here) was unknown to
+the tool, so it could recommend a ninth running back — advice that cannot be
+taken, and an armed picker attempting it would fail for a reason nothing in the
+log would explain. Positions at their cap now drop off the board.
+
+**5d. Positional run detection.**
+When six of the last eight picks are running backs, the position is emptying
+faster than replacement level knows, because replacement only moves as players
+leave the pool. Real drafters react to runs. Not started.
+
 ## P1 — first weeks of the season
 
 **5. Re-check whether weekly projections appear once the season starts.**

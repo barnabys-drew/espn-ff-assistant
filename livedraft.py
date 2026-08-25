@@ -17,14 +17,17 @@ import os
 import sys
 import time
 
+import draftclock
 import draftpick
 import draftroom
 import draftsocket
+import rosterlimits
 import schedule as schedule_mod
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
                     gain_from_adding, starting_slots)
-from draft import allocate_flex, parse_slots, replacement_levels
+from draft import (allocate_flex, assign_tiers, parse_slots,
+                   replacement_levels)
 
 
 class Board:
@@ -40,7 +43,9 @@ class Board:
         self._load()
         weeks = int(getattr(league.settings, "reg_season_count", 0) or 17)
         self.byes = schedule_mod.fetch_bye_weeks(league, weeks)
-        print(f"  bye weeks known for {len(self.byes)} pro teams.", flush=True)
+        self.limits = rosterlimits.fetch_limits(league)
+        print(f"  bye weeks for {len(self.byes)} pro teams; position caps: "
+              f"{self.limits or 'none published'}", flush=True)
 
     def _load(self):
         print("Fetching the player pool once (the API cannot be trusted "
@@ -82,8 +87,16 @@ class Board:
             baseline = levels.get(pos, 0)
             for r in rows:
                 r["vor"] = round(r["proj"] - baseline, 1)
-                board.append(r)
+            assign_tiers(rows)      # tiers are per position, off VOR
+            board.extend(rows)
         board.sort(key=lambda r: -r["vor"])
+
+        # A position at its cap cannot be drafted again, so recommending one
+        # would be advice that cannot be taken -- and an armed picker would
+        # fail in the room for a reason nothing in the log would explain.
+        full = rosterlimits.full_positions(my_rows, self.limits)
+        if full:
+            board = [r for r in board if r["pos"] not in full]
 
         if my_rows and self.slots:
             base_total, _ = best_lineup(my_rows, self.slots)
@@ -132,7 +145,28 @@ def log(message):
         fh.write(f"{stamp}  {message}\n")
 
 
-def render(board, state, rows, top, teams):
+def tier_pressure(rows, picks_away):
+    """Per position: how many are left in the best remaining tier.
+
+    The question a value board cannot answer on its own is whether the player
+    it likes will still be there. Three left in a tier with fourteen picks
+    until your turn is a very different situation from eleven left.
+    """
+    out = {}
+    for row in rows:
+        pos = row["pos"]
+        if pos not in out:
+            out[pos] = {"tier": row.get("tier"), "left": 0,
+                        "best": row["name"]}
+        if row.get("tier") == out[pos]["tier"]:
+            out[pos]["left"] += 1
+    for pos, info in out.items():
+        info["at_risk"] = (picks_away is not None
+                           and info["left"] <= max(1, picks_away // 3))
+    return out
+
+
+def render(board, state, rows, top, teams, upcoming=None):
     my_rows = [board.by_id[p] for p in state.my_picks if p in board.by_id]
     show_need = bool(my_rows)
 
@@ -155,9 +189,24 @@ def render(board, state, rows, top, teams):
     if state.picks:
         recent = [f"{board.name(p['player_id'])}" for p in state.picks[-4:]]
         print("Just gone:   " + ", ".join(recent))
+
+    picks_away = None
+    if upcoming:
+        nxt = [p for p in upcoming if p > len(state.picks)]
+        if nxt:
+            picks_away = nxt[0] - 1 - len(state.picks)
+            print(f"Next pick:   #{nxt[0]} ({picks_away} away)"
+                  + (f", then #{nxt[1]}" if len(nxt) > 1 else ""))
+
+    pressure = tier_pressure(rows, picks_away)
+    urgent = [f"{p} tier {i['tier']}: {i['left']} left"
+              for p, i in sorted(pressure.items()) if i["at_risk"]]
+    if urgent:
+        print("Thin:        " + "  |  ".join(urgent))
     print()
 
-    head = f"{'PLAYER':<24}{'POS':<5}{'TM':<5}{'BYE':>6}{'PROJ':>8}{'VOR':>8}"
+    head = (f"{'PLAYER':<24}{'POS':<5}{'TM':<5}{'BYE':>6}{'PROJ':>8}"
+            f"{'VOR':>8}{'TIER':>6}")
     print(head + (f"{'NEED':>8}" if show_need else ""))
     print("-" * (len(head) + (8 if show_need else 0)))
     for r in rows[:top]:
@@ -166,7 +215,8 @@ def render(board, state, rows, top, teams):
             bye = (f"{r['bye']}({r['bye_clash']})" if r.get("bye_clash")
                    else str(r["bye"]))
         line = (f"{r['name'][:23]:<24}{r['pos']:<5}{r['team']:<5}"
-                f"{bye:>6}{r['proj']:>8.1f}{r['vor']:>+8.1f}")
+                f"{bye:>6}{r['proj']:>8.1f}{r['vor']:>+8.1f}"
+                f"{('T' + str(r.get('tier', '?'))):>6}")
         if show_need:
             line += f"{r.get('need', 0.0):>+8.1f}"
         print(line)
@@ -273,6 +323,11 @@ def main():
         pending["dirty"] = True
 
         rows = board.value([])
+        ds = draftclock.draft_settings(league)
+        order = ds.get("pickOrder") or []
+        sequence = draftclock.snake_order(
+            order, draftclock.rounds_from_grid(league, len(order))
+            or draftclock.roster_size(league.settings) or 16)
         attempted = set()
         try:
             while True:
@@ -320,7 +375,9 @@ def main():
                                if p in board.by_id]
                     rows = board.value(my_rows)
                     pending["dirty"] = False
-                render(board, state, rows, args.top, len(league.teams))
+                render(board, state, rows, args.top, len(league.teams),
+                       draftclock.next_picks_for(
+                           sequence, team.team_id, len(state.picks)))
         except KeyboardInterrupt:
             print("\nStopped.")
         finally:
