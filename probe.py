@@ -4,39 +4,15 @@ Run:  .venv/bin/python probe.py
 Reads credentials from .env (gitignored).
 """
 import os
-import sys
 import json
 
-
-def load_env(path=".env"):
-    if not os.path.exists(path):
-        sys.exit(f"No {path} found. Copy .env.example to .env and fill it in.")
-    env = {}
-    with open(path) as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            env[key.strip()] = val.strip().strip('"').strip("'")
-    return env
+from common import connect, load_env
 
 
 def main():
     env = load_env()
-    missing = [k for k in ("ESPN_S2", "SWID", "LEAGUE_ID") if not env.get(k)]
-    if missing:
-        sys.exit(f"Missing in .env: {', '.join(missing)}")
-
-    from espn_api.football import League
-
     season = int(env.get("SEASON", 2026))
-    league = League(
-        league_id=int(env["LEAGUE_ID"]),
-        year=season,
-        espn_s2=env["ESPN_S2"],
-        swid=env["SWID"],
-    )
+    league = connect(env)
 
     s = league.settings
     print("=" * 60)

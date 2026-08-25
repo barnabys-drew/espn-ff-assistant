@@ -3,8 +3,9 @@
 Personal tooling for drafting and managing a private ESPN fantasy football team.
 Built for the 2026 season.
 
-> **Status:** pre-draft setup. Auth and league probing work; draft valuation is
-> the next build. Nothing here writes to the league yet.
+> **Status:** pre-draft. Auth, league probing, and the value-over-replacement
+> draft board are built; the board's math is unit-tested but has not yet been
+> run against the live league. Nothing here writes to the league.
 
 ## Why this exists
 
@@ -56,6 +57,46 @@ and reusing the persistent profile is both more reliable and less fragile.
 Prints and saves (`out/league_settings.json`) the settings that drive valuation:
 scoring rules, roster slot counts, team list, and whether the draft has happened.
 
+### 3. Build the draft board
+
+```bash
+.venv/bin/python draft.py            # overall board + per-position tiers
+.venv/bin/python draft.py --pos RB   # one position, deeper
+.venv/bin/python draft.py --top 100  # a longer overall board
+```
+
+Writes `out/draft_board.json` and `out/cheatsheet.md`.
+
+The board ranks by **value over replacement**, not raw projection. A position's
+replacement level is the projection of the best player still unrostered once
+every team has filled its starting slots there — so a QB's 340 points and a
+RB's 280 become comparable. Flex slots are allocated to whoever actually wins
+them: the best players left past each position's fixed starters, which is why
+an RB/WR/TE flex pushes RB replacement deeper than its two fixed slots alone.
+
+Tiers break where the drop to the next player is unusually large for that
+position (mean gap plus one standard deviation). Inside a tier, draft for need;
+between tiers, take the player.
+
+Two things worth knowing about the inputs:
+
+- ESPN's `projected_total_points` is already scored by *your* league's rules
+  when fetched in league context, so no re-scoring happens here. The board is
+  only as good as ESPN's projections — it is a value lens over them, not an
+  independent forecast.
+- The pool is every undrafted player, so `draft.py` also works **mid-draft** as
+  a best-available sheet. Re-run it between picks; it flags how many picks are
+  already recorded.
+
+## Tests
+
+```bash
+.venv/bin/python -m unittest test_draft -v
+```
+
+Covers slot parsing, flex allocation, replacement level, and tier breaks with
+fixture data — no network, no credentials.
+
 ## Security
 
 Two paths hold live credentials and are both gitignored:
@@ -72,12 +113,13 @@ dumps can carry league-member names.
 
 ## Roadmap
 
-**Draft prep** (current focus — draft is the week of 2026-08-31)
-- Pull the undrafted pool via `free_agents()`. ESPN's `projected_total_points`
-  already reflects *your league's* scoring when fetched in league context, so
-  projections come pre-adjusted.
-- Compute value over replacement by position from roster slots and league size.
-- Emit tiers and a cheat sheet.
+**Draft prep** — built (`draft.py`), pending a live run. Draft is the week of
+2026-08-31.
+- Remaining: run it once against the real league and sanity-check the pool
+  depths in `POOL_DEPTH` are deep enough to reach replacement level at every
+  position.
+- Possible refinements: bye-week collisions, and blending a second projection
+  source so the board is not hostage to ESPN's numbers alone.
 
 **Live draft** (stretch, experimental)
 - `espn-api` has no draft websocket — only `refresh_draft()`, which reads
@@ -110,4 +152,7 @@ dumps can carry league-member names.
 |---|---|
 | `login.py` | Headed browser login; harvests cookies into `.env` |
 | `probe.py` | Dumps league scoring, roster slots, teams |
+| `draft.py` | VOR draft board, tiers, and cheat sheet |
+| `common.py` | `.env` loading and the read-only league connection |
+| `test_draft.py` | Unit tests for the valuation math |
 | `.env.example` | Template; copy to `.env` |
