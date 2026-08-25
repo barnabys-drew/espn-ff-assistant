@@ -25,6 +25,7 @@ import statistics
 import sys
 import time
 
+import draftclock
 import picks as picks_mod
 import schedule as schedule_mod
 from common import connect, find_my_team, load_env
@@ -174,6 +175,7 @@ def build(league, week, depth, my_team_id=None, by_need=False):
 
     drafted, draft_complete = picks_mod.fetch_picks(league)
     taken = picks_mod.taken_ids(drafted)
+    clock = draftclock.status(league, my_team_id, len(drafted))
     playoff = schedule_mod.playoff_weeks(league)
     pool, skipped, stale = fetch_pool(league, week, depth, taken, playoff)
 
@@ -244,6 +246,7 @@ def build(league, week, depth, my_team_id=None, by_need=False):
         "team_count": team_count,
         "picks_seen": len(drafted),
         "picks": drafted,
+        "clock": clock,
         "draft_complete": draft_complete,
         "taken_but_still_listed": stale,
         "my_team_id": my_team_id,
@@ -306,6 +309,8 @@ def report(data, top, only_pos):
           f"{data['team_count']} teams")
     print("=" * 86)
 
+    if data.get("clock"):
+        print(draftclock.line(data["clock"]))
     if data["picks_seen"]:
         state = "complete" if data["draft_complete"] else "in progress"
         print(f"{data['picks_seen']} picks off the board (draft {state}) — this is "
