@@ -15,16 +15,18 @@ drafted removes a real option from the board.
 """
 import re
 
-PICK_PANEL_SELECTORS = [
-    '[class*="pick-history"]',
-    '[class*="PickHistory"]',
-    '[class*="picks"]',
-    '[class*="Picks"]',
+# The roster panel is a plain ESPN table with POS / PLAYER / BYE headers -- it
+# carries no "roster" class, so it is found by its content instead. Verified
+# against a live draft room.
+ROSTER_PANEL_SELECTORS = [
+    'table:has-text("POS"):has-text("PLAYER"):has-text("BYE")',
+    '[class*="Table"]:has-text("POS"):has-text("PLAYER")',
 ]
 
-ROSTER_PANEL_SELECTORS = [
-    '[class*="roster"]',
-    '[class*="Roster"]',
+# The header strip carrying round, clock and whose pick it is.
+PICK_TRAIN_SELECTORS = [
+    '[class*="pick-train__content"]',
+    '[class*="pickTrain"]',
 ]
 
 
@@ -73,7 +75,12 @@ def match_abbreviated(label, known):
 
 
 def panel_text(page, selectors):
-    """Text of the first matching panel, or the whole page as a fallback."""
+    """Text of the first matching panel, or "" if none match.
+
+    Deliberately no whole-page fallback. The page contains the full list of
+    *available* players, so falling back to it would report almost everybody as
+    drafted -- catastrophically worse than reporting nobody.
+    """
     for selector in selectors:
         try:
             node = page.locator(selector).first
@@ -83,15 +90,25 @@ def panel_text(page, selectors):
                     return text
         except Exception:
             continue
-    try:
-        return page.inner_text("body", timeout=5000) or ""
-    except Exception:
-        return ""
+    return ""
 
 
-def drafted_players(page, known):
-    """Full names of players the room shows as already drafted."""
-    return names_in(panel_text(page, PICK_PANEL_SELECTORS), known)
+def current_pick(page):
+    """(round, overall_pick, team_on_the_clock) from the header, or Nones.
+
+    The header says "RND 7 OF 16 | 00:35 | ON THE CLOCK: PICK 66 | Some Team",
+    which is more trustworthy than anything derived: the socket carries no
+    round, and a board seeded mid-draft cannot count picks it never saw.
+    """
+    text = panel_text(page, PICK_TRAIN_SELECTORS)
+    if not text:
+        return None, None, None
+    rnd = re.search(r"RND\s+(\d+)\s+OF", text, re.I)
+    pick = re.search(r"ON THE CLOCK:\s*PICK\s+(\d+)", text, re.I)
+    team = re.search(r"ON THE CLOCK:\s*PICK\s+\d+\s*\|?\s*([^|]{2,40})", text)
+    return (int(rnd.group(1)) if rnd else None,
+            int(pick.group(1)) if pick else None,
+            team.group(1).strip() if team else None)
 
 
 def my_roster_players(page, known):

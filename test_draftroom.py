@@ -80,6 +80,38 @@ class Abbreviated(unittest.TestCase):
             self.assertIsNone(draftroom.match_abbreviated(junk, KNOWN))
 
 
+class CurrentPick(unittest.TestCase):
+    class Header:
+        def __init__(self, text):
+            self.text = text
+
+        def locator(self, selector):
+            page = self
+
+            class L:
+                def count(self):
+                    return 1 if "pick" in selector.lower() else 0
+
+                @property
+                def first(self):
+                    return self
+
+                def inner_text(self, timeout=None):
+                    return page.text
+            return L()
+
+    def test_reads_round_and_pick_from_the_header(self):
+        page = self.Header("RND 7 OF 16 | 00:35 | ON THE CLOCK: PICK 66 | "
+                           "Drew 's Dangerous Team | PICK 67 | AUTO")
+        rnd, pick, team = draftroom.current_pick(page)
+        self.assertEqual((rnd, pick), (7, 66))
+        self.assertIn("Dangerous", team)
+
+    def test_a_header_it_cannot_read_yields_nothing(self):
+        self.assertEqual(draftroom.current_pick(self.Header("nothing useful")),
+                         (None, None, None))
+
+
 class RosterPanel(unittest.TestCase):
     class FakePage:
         def __init__(self, text):
@@ -90,7 +122,7 @@ class RosterPanel(unittest.TestCase):
 
             class L:
                 def count(self):
-                    return 1 if "roster" in selector.lower() else 0
+                    return 1 if "PLAYER" in selector else 0
 
                 @property
                 def first(self):

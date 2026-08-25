@@ -191,21 +191,21 @@ def main():
         known = [r["name"] for r in board.by_id.values()]
         by_name = {r["name"]: pid for pid, r in board.by_id.items()}
         try:
-            gone = draftroom.drafted_players(page, known)
             mine = draftroom.my_roster_players(page, known)
         except Exception as exc:
-            gone, mine = [], []
-            print(f"could not seed from the room: {type(exc).__name__}: {exc}",
+            mine = []
+            print(f"could not read your roster: {type(exc).__name__}: {exc}",
                   flush=True)
-        seeded = state.seed([by_name[n] for n in gone if n in by_name],
-                            [by_name[n] for n in mine if n in by_name])
+        mine_ids = [by_name[n] for n in mine if n in by_name]
+        seeded = state.seed(mine_ids, mine_ids)
         if seeded:
-            print(f"seeded {seeded} picks already made "
-                  f"({len(mine)} of them yours) from the draft room.",
-                  flush=True)
+            print(f"seeded {seeded} players already on your roster: "
+                  f"{', '.join(mine)}", flush=True)
         else:
-            print("no prior picks found in the room — starting clean.",
-                  flush=True)
+            print("no players on your roster yet.", flush=True)
+        print("NOTE: other teams' earlier picks are not seeded — the board may "
+              "still list players who are gone. Autopick skips them "
+              "automatically.", flush=True)
         pending["dirty"] = True
 
         rows = board.value([])
@@ -220,11 +220,21 @@ def main():
                     if (left is not None and left <= args.autopick
                             and marker not in attempted):
                         attempted.add(marker)
-                        target = rows[0]
-                        ok, msg = draftpick.pick(page, target["name"],
-                                                 dry_run=not args.arm)
-                        print(f"\n>>> AUTOPICK {target['name']}: {msg}",
-                              flush=True)
+                        # A player already drafted is not in the room's list at
+                        # all, so his row cannot be found -- which makes "not
+                        # found" a reliable signal to move down the board
+                        # rather than an error.
+                        target, ok, msg = None, False, "no candidate"
+                        for candidate in rows[:6]:
+                            ok, msg = draftpick.pick(page, candidate["name"],
+                                                     dry_run=not args.arm)
+                            target = candidate
+                            if ok:
+                                break
+                            print(f">>> skipping {candidate['name']}: {msg}",
+                                  flush=True)
+                        print(f"\n>>> AUTOPICK {target['name'] if target else '?'}"
+                              f": {msg}", flush=True)
                         if ok and args.arm:
                             page.wait_for_timeout(2500)
                             good, detail = draftpick.confirm_via_socket(
