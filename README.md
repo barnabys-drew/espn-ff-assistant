@@ -1,12 +1,49 @@
 # ESPN Fantasy Football Assistant
 
 Personal tooling for drafting and managing a private ESPN fantasy football team.
-Built for the 2026 season.
+Built for the 2026 season. Private repo; nothing here is intended for anyone
+else's league.
 
-> **Status:** pre-draft, and now **verified against the live league**. Auth,
-> probing, the draft board, live pick reading and the waiver wire all run
-> against real data; a full board builds in **~3.7s**, which is what makes it
-> usable on a pick clock. Nothing here writes to the league.
+## What it does
+
+**Values players for *your* league, not in the abstract.** Rankings are value
+over replacement, where replacement level comes from your actual roster slots
+and league size, so a quarterback's 340 points and a running back's 280 become
+comparable. ESPN's projections are already scored by your league's rules —
+[verified, not assumed](#3-build-the-draft-board).
+
+**Drafts for you, live.** `livedraft.py` opens the draft room, reads every pick
+off the draft websocket as it happens, re-ranks what is left, and — optionally —
+makes your pick. It knows whose turn it is, how many picks until yours, which
+tiers are emptying, which positions are capped, and what a shared bye week
+costs. It has drafted a full roster unattended: 9 picks, 9 socket
+confirmations, no failures.
+
+**Works the waiver wire in-season.** `waivers.py` ranks free agents by how much
+each would raise your best starting lineup, which is the right question once you
+cannot roster everyone.
+
+Everything is **read-only except drafting**. No trades, no waiver claims, no
+lineup changes — see the roadmap.
+
+## Where it is going
+
+**Near term** — finish the draft path and use it on 2026-08-31. Then, as the
+season starts: a start/sit report, and confirming whether ESPN publishes
+per-week projections once games begin, which currently blocks rest-of-season
+valuation.
+
+**Medium term** — writes. Trades and waiver claims need a port of the write
+support that exists in a baseball fork, behind an env switch and a confirm
+token. Accept/reject on trades may not be reachable at all.
+
+**Long term** — own projections. Everything here is a value lens over ESPN's
+numbers and never questions them; generating better ones means Bayesian
+modelling over real usage data. Deliberately last, and in a specific order,
+for reasons in the roadmap.
+
+[`TODO.md`](TODO.md) is the ordered list, including what is known-and-accepted
+rather than outstanding.
 
 ## Why this exists
 
