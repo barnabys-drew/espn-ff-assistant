@@ -90,14 +90,54 @@ Two things worth knowing about the inputs:
   a best-available sheet. Re-run it between picks; it flags how many picks are
   already recorded.
 
+### 4. Work the waiver wire
+
+```bash
+.venv/bin/python waivers.py              # rest-of-season adds
+.venv/bin/python waivers.py --week 5     # streaming: week 5 only
+.venv/bin/python waivers.py --pos RB     # one position
+```
+
+Writes `out/waivers.json`.
+
+The draft board asks *who is the best player available*. In-season that is the
+wrong question, because you cannot roster everyone — what matters is whether a
+free agent beats somebody you are already starting. So this ranks by **lineup
+gain**: your best possible starting lineup with the player added, minus your
+best possible starting lineup today.
+
+That framing handles the awkward cases without special-casing them. A great WR
+is worth nothing if your two WR slots and your flex are already better. A
+mediocre TE is worth a lot the week your starting TE is on bye. And gains
+cascade correctly — signing a WR who displaces your WR2 also bumps your WR2 into
+the flex over someone worse, and the number reflects both moves.
+
+Two details that matter:
+
+- **Rest-of-season value is summed from the remaining weeks**, not read off
+  `projected_total_points`, which is a full-season figure and still includes
+  games already played. Bye weeks fall out of this for free: a week with no
+  projected game contributes nothing.
+- **Slot eligibility comes from the API** (`eligibleSlots`), not inferred from
+  the position string, so superflex, WR/TE, and IDP slots work without the
+  optimiser knowing they exist.
+
+Your team is identified by the `SWID` in `.env`. If that lookup fails it will
+print the league's teams and ask for `--team-id`.
+
+Injured players are flagged, not filtered — `QUE`/`OUT` shows in the row and the
+call is yours.
+
 ## Tests
 
 ```bash
-.venv/bin/python -m unittest test_draft -v
+.venv/bin/python -m unittest discover -p 'test_*.py' -v
 ```
 
-Covers slot parsing, flex allocation, replacement level, and tier breaks with
-fixture data — no network, no credentials.
+`test_draft` covers slot parsing, flex allocation, replacement level, and tier
+breaks. `test_waivers` covers the lineup optimiser, the projection window, and
+the gain ranking — the optimiser especially, since every gain number is a
+difference of two of its outputs. All fixture data: no network, no credentials.
 
 ### Testing against a real season
 
@@ -145,6 +185,12 @@ dumps can carry league-member names.
 - Possible refinements: bye-week collisions, and blending a second projection
   source so the board is not hostage to ESPN's numbers alone.
 
+**In-season management** — waiver wire built (`waivers.py`), pending a live run.
+- Still read-only: it tells you who to claim, you make the claim in ESPN.
+- Next up, and cheap because the lineup optimiser already exists: a start/sit
+  report (the optimiser run against your roster alone, showing who to bench)
+  and a trade evaluator (lineup gain for both sides of a proposal).
+
 **Live draft** (stretch, experimental)
 - `espn-api` has no draft websocket — only `refresh_draft()`, which reads
   completed picks. Real-time board state needs browser automation.
@@ -177,6 +223,8 @@ dumps can carry league-member names.
 | `login.py` | Headed browser login; harvests cookies into `.env` |
 | `probe.py` | Dumps league scoring, roster slots, teams |
 | `draft.py` | VOR draft board, tiers, and cheat sheet |
+| `waivers.py` | Waiver wire ranked by lineup gain |
 | `common.py` | `.env` loading and the read-only league connection |
 | `test_draft.py` | Unit tests for the valuation math |
+| `test_waivers.py` | Unit tests for the lineup optimiser and gain ranking |
 | `.env.example` | Template; copy to `.env` |
