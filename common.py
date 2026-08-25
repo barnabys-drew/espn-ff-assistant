@@ -24,14 +24,19 @@ def load_env(path=".env"):
     return env
 
 
-def connect(env=None):
-    """Return a read-only espn-api League built from .env credentials."""
+def connect(env=None, year=None):
+    """Return a read-only espn-api League built from .env credentials.
+
+    year overrides SEASON from .env. That override is what makes testing
+    against a completed past season possible without editing .env and having to
+    remember to put it back before a live draft.
+    """
     env = env or load_env()
     from espn_api.football import League
 
     return League(
         league_id=int(env["LEAGUE_ID"]),
-        year=int(env.get("SEASON", 2026)),
+        year=int(year or env.get("SEASON", 2026)),
         espn_s2=env["ESPN_S2"],
         swid=env["SWID"],
     )

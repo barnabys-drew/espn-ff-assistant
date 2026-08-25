@@ -1,18 +1,25 @@
 """Connect to the league and dump the settings that drive draft valuation.
 
 Run:  .venv/bin/python probe.py
+      .venv/bin/python probe.py --season 2025   # a past season, for testing
+
 Reads credentials from .env (gitignored).
 """
+import argparse
 import os
 import json
 
-from common import connect, load_env
+from common import connect
 
 
 def main():
-    env = load_env()
-    season = int(env.get("SEASON", 2026))
-    league = connect(env)
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--season", type=int,
+                    help="season to probe (default: SEASON from .env)")
+    args = ap.parse_args()
+
+    league = connect(year=args.season)
+    season = league.year  # what the API actually returned, not what we asked for
 
     s = league.settings
     print("=" * 60)

@@ -52,6 +52,7 @@ and reusing the persistent profile is both more reliable and less fragile.
 
 ```bash
 .venv/bin/python probe.py
+.venv/bin/python probe.py --season 2025   # a past season
 ```
 
 Prints and saves (`out/league_settings.json`) the settings that drive valuation:
@@ -63,6 +64,7 @@ scoring rules, roster slot counts, team list, and whether the draft has happened
 .venv/bin/python draft.py            # overall board + per-position tiers
 .venv/bin/python draft.py --pos RB   # one position, deeper
 .venv/bin/python draft.py --top 100  # a longer overall board
+.venv/bin/python draft.py --season 2025 --week 1   # a past season
 ```
 
 Writes `out/draft_board.json` and `out/cheatsheet.md`.
@@ -96,6 +98,28 @@ Two things worth knowing about the inputs:
 
 Covers slot parsing, flex allocation, replacement level, and tier breaks with
 fixture data — no network, no credentials.
+
+### Testing against a real season
+
+The unit tests prove the valuation math, not the ESPN integration — every
+assumption about response shapes is still unverified. `--season` exists to fix
+that without editing `.env` and having to remember to change it back before a
+live draft:
+
+```bash
+.venv/bin/python probe.py --season 2025
+.venv/bin/python draft.py --season 2025 --week 1
+```
+
+A completed season is the cheapest real test: same league, real roster slots,
+real player attributes, and a real draft — so it also exercises the
+`picks_recorded > 0` path, which is the mode you are actually in on draft night.
+Pass `--week 1`, because a finished season's current week has no projections
+left and every player would be skipped as unprojected.
+
+The one thing it cannot test is whether `POOL_DEPTH` reaches replacement level,
+since in a completed season the free-agent pool is only the undrafted leftovers.
+That needs a league that has not drafted yet.
 
 ## Security
 

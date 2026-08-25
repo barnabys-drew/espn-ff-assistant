@@ -3,6 +3,7 @@
 Run:  .venv/bin/python draft.py              # full board + per-position tiers
       .venv/bin/python draft.py --pos RB     # one position
       .venv/bin/python draft.py --top 100    # deeper board
+      .venv/bin/python draft.py --season 2025 --week 1   # past season, for testing
 
 Reads only. ESPN's projections come back already scored by *your* league's
 rules when fetched in league context, so no re-scoring is needed here — the
@@ -21,6 +22,7 @@ import argparse
 import json
 import os
 import statistics
+import sys
 
 from common import connect
 
@@ -269,15 +271,24 @@ def main():
     ap.add_argument("--pos", choices=POSITIONS, help="show only this position")
     ap.add_argument("--top", type=int, default=60, help="rows in the overall board")
     ap.add_argument("--week", type=int, help="scoring period (default: week 1)")
+    ap.add_argument("--season", type=int,
+                    help="season to build for (default: SEASON from .env). A "
+                         "completed season usually wants --week 1 too, since "
+                         "its current week has no projections left")
     ap.add_argument("--depth", type=int,
                     help="override players pulled per position")
     args = ap.parse_args()
 
-    league = connect()
+    league = connect(year=args.season)
     week = args.week or max(1, getattr(league, "current_week", 1) or 1)
     depth = ({pos: args.depth for pos in POSITIONS} if args.depth else POOL_DEPTH)
 
     data = build(league, week, depth)
+    if not data["board"]:
+        sys.exit(f"No projected players found for {data['season']} week {week}. "
+                 f"({data['unprojected_skipped']} unprojected players were "
+                 f"skipped.) A completed season carries no projections in its "
+                 f"later weeks — try --week 1.")
     report(data, args.top, args.pos)
 
     os.makedirs("out", exist_ok=True)
