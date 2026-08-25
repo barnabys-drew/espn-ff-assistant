@@ -1,0 +1,18 @@
+# Secrets — ESPN session cookies. NEVER commit.
+.env
+*.env
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local data dumps (may contain league/member info)
+out/
+*.json
+!package.json
+
+# Playwright persistent browser profile — CONTAINS A LIVE ESPN SESSION. Never commit.
+.pwprofile/
