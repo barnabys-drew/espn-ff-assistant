@@ -10,13 +10,14 @@ Draft is the week of **2026-08-31**.
 Everything here is either a correctness bug in something already relied on, or
 a gap that would only be discovered live.
 
-**1. NEED is collapsing to VOR on the live board.**
-Seen in a real draft: with two RBs rostered, every row showed `NEED == VOR`
-exactly. The replacement-gain term must be coming out zero for every position.
-This matters more than it looks — autopick now *sorts* on NEED, so if NEED is
-silently just VOR, the late-round fix is doing nothing and the picker drifts
-back toward a fourth RB with QB and TE empty. Offline tests do produce NEED
-distinct from VOR, so the collapse is specific to the live path.
+**1. ~~NEED collapsing to VOR~~ — not a bug, closed.**
+`NEED == VOR` with two RBs rostered looked wrong but is correct. While slots
+are still empty, `gain` equals a player's full projection, so
+`need = proj - replacement`, which *is* VOR. Reproduced offline, and confirmed
+the other direction: once every starting slot is filled, every position drops
+to `NEED +0.0` while VOR still reads `+140`, because nobody can crack the
+lineup. The degradation is by construction, and it lasts longer than expected
+simply because slots stay open for many rounds.
 
 **2. Autopick attempts are not logged anywhere.**
 They print between screen redraws and are gone in ~2.5 seconds, so a failure
