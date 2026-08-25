@@ -1,0 +1,434 @@
+<title>A Better Fantasy Football App — Concept Brief</title>
+<style>
+  /* ---- Light palette (complete, on bare :root) ---- */
+  :root {
+    --ground:   #F6F8F5;
+    --surface:  #FFFFFF;
+    --sunken:   #EDF1EC;
+    --ink:      #13181A;
+    --muted:    #5B6A6C;
+    --faint:    #8A9997;
+    --rule:     #DCE3DD;
+    --rule-firm:#C3CDC4;
+    --accent:   #9C7411;        /* flag yellow, darkened for light ground */
+    --accent-bg:#FBF0CE;
+    --pos:      #2F6B45;
+    --neg:      #9B3223;
+    --warn:     #8A5A12;
+    --shadow:   0 1px 2px rgba(19,24,26,.06), 0 8px 24px rgba(19,24,26,.05);
+
+    --display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --body: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --data: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0F1315;
+      --surface:  #161B1D;
+      --sunken:   #1C2225;
+      --ink:      #E7EDEA;
+      --muted:    #94A3A1;
+      --faint:    #6E7C7B;
+      --rule:     #272F32;
+      --rule-firm:#3A4448;
+      --accent:   #EFC94C;
+      --accent-bg:#2A2415;
+      --pos:      #6FBE8B;
+      --neg:      #E08375;
+      --warn:     #E0AE5A;
+      --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0F1315;
+    --surface:  #161B1D;
+    --sunken:   #1C2225;
+    --ink:      #E7EDEA;
+    --muted:    #94A3A1;
+    --faint:    #6E7C7B;
+    --rule:     #272F32;
+    --rule-firm:#3A4448;
+    --accent:   #EFC94C;
+    --accent-bg:#2A2415;
+    --pos:      #6FBE8B;
+    --neg:      #E08375;
+    --warn:     #E0AE5A;
+    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 43rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  /* ---- Masthead ---- */
+  header.masthead {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    padding: 3.5rem 0 1.75rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--data);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 800;
+    letter-spacing: -.028em;
+    font-size: clamp(2rem, 6.5vw, 3rem);
+    line-height: 1.06;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .standfirst {
+    color: var(--muted);
+    font-size: 1.075rem;
+    margin: 0;
+    max-width: 34rem;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    font-family: var(--data);
+    font-size: .74rem;
+    letter-spacing: .04em;
+    color: var(--faint);
+    text-transform: uppercase;
+  }
+
+  /* ---- Sections ---- */
+  section { display: flex; flex-direction: column; gap: 1rem; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    letter-spacing: -.018em;
+    font-size: 1.45rem;
+    line-height: 1.2;
+    text-wrap: balance;
+    margin: 0;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--display);
+    font-weight: 650;
+    font-size: 1.02rem;
+    letter-spacing: -.005em;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: .6rem;
+  }
+  h3 .tag {
+    font-family: var(--data);
+    font-size: .72rem;
+    font-weight: 400;
+    letter-spacing: .1em;
+    color: var(--accent);
+    border: 1px solid var(--rule-firm);
+    border-radius: 2px;
+    padding: .08rem .38rem;
+    flex: none;
+  }
+  p { margin: 0; }
+  strong { font-weight: 700; }
+  em { font-style: italic; }
+  a { color: var(--ink); text-decoration-color: var(--rule-firm); text-underline-offset: .18em; }
+  a:hover { text-decoration-color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: .6rem; }
+  li::marker { color: var(--faint); }
+
+  code {
+    font-family: var(--data);
+    font-size: .86em;
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .08em .32em;
+    word-break: break-word;
+  }
+
+  /* ---- Pull quote / evidence ---- */
+  blockquote {
+    margin: 0;
+    padding: .1rem 0 .1rem 1.15rem;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ---- The centerpiece table ---- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--display); font-size: .88rem; }
+  caption {
+    caption-side: bottom;
+    text-align: left;
+    padding: .7rem .9rem;
+    color: var(--faint);
+    font-family: var(--data);
+    font-size: .72rem;
+    letter-spacing: .03em;
+    border-top: 1px solid var(--rule);
+  }
+  th, td { padding: .68rem .9rem; text-align: left; border-bottom: 1px solid var(--rule); }
+  thead th {
+    font-family: var(--data);
+    font-size: .68rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 400;
+    background: var(--sunken);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.plat { font-weight: 700; }
+  .yes { color: var(--pos); }
+  .no  { color: var(--neg); }
+  .part{ color: var(--warn); }
+  .mark { font-family: var(--data); font-size: .8rem; letter-spacing: .02em; white-space: nowrap; }
+
+  /* ---- Callout ---- */
+  .callout {
+    background: var(--accent-bg);
+    border: 1px solid var(--rule-firm);
+    border-left: 4px solid var(--accent);
+    border-radius: 4px;
+    padding: 1.35rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+  }
+  .callout .label {
+    font-family: var(--data);
+    font-size: .68rem;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--warn);
+    margin: 0;
+  }
+  .callout p { color: var(--ink); }
+
+  /* ---- Option cards ---- */
+  .options { display: flex; flex-direction: column; gap: 1rem; }
+  .opt {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.2rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+    box-shadow: var(--shadow);
+  }
+  .opt.pick { border-color: var(--accent); }
+  .opt .tradeoff {
+    font-size: .92rem;
+    color: var(--muted);
+    padding-top: .7rem;
+    border-top: 1px dashed var(--rule);
+  }
+  .opt .tradeoff b { font-family: var(--data); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); display: block; margin-bottom: .2rem; font-weight: 400; }
+
+  /* ---- Recommendation ---- */
+  .rec {
+    background: var(--ink);
+    color: var(--ground);
+    border-radius: 4px;
+    padding: 1.6rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+  }
+  .rec h2 { color: var(--ground); border-top: none; padding-top: 0; }
+  .rec .label { font-family: var(--data); font-size: .68rem; letter-spacing: .15em; text-transform: uppercase; color: var(--accent); margin: 0; }
+  .rec p { color: var(--ground); opacity: .88; }
+
+  /* ---- Sources ---- */
+  .sources { font-size: .9rem; }
+  .sources ul { gap: .45rem; }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    font-family: var(--data);
+    font-size: .74rem;
+    letter-spacing: .03em;
+    color: var(--faint);
+  }
+
+  @media (max-width: 34rem) {
+    body { font-size: 16px; }
+    header.masthead { padding-top: 2.5rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Concept Brief · Not Committed</p>
+    <h1>A Better Fantasy Football App</h1>
+    <p class="standfirst">ESPN's fantasy platform fails publicly and repeatedly. That's a real opening — but the constraint that shapes this product isn't the one you'd expect.</p>
+    <div class="meta">
+      <span>24 August 2026</span>
+      <span>Product Research</span>
+      <span>Status: Exploratory</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>The premise</h2>
+    <p>ESPN's fantasy app is widely disliked, and a better one is a viable product.</p>
+    <p>The first half of that is <strong>verifiably true</strong>, not just a hunch — worth saying, because most product hunches don't survive a search.</p>
+  </section>
+
+  <section>
+    <h2>The pain is documented</h2>
+    <p>ESPN's fantasy platform has visible, repeated, public failures:</p>
+    <ul>
+      <li>The app broke during <strong>Thursday Night Football in Week 15</strong> of the 2025 season, with thousands of Down Detector reports logged in a half-hour span.</li>
+      <li>It failed again on the <strong>first Sunday of the 2025 regular season</strong> — the highest-traffic, highest-stakes day of the fantasy calendar.</li>
+      <li>Live scoring stopped displaying during games, which is precisely when the product has to work.</li>
+    </ul>
+    <blockquote>"Your new app is horrendous. The layout is garbage and hard to follow, it's unbearably slow."</blockquote>
+    <p>The failure mode is the interesting part. ESPN breaks <strong>under load, during live games</strong> — an infrastructure problem, not a feature gap. It also means the pain is felt sharply but intermittently: a few brutal Sundays a season, not daily friction. That shapes willingness to pay.</p>
+  </section>
+
+  <section>
+    <h2>The constraint that reframes the product</h2>
+    <p>Researching the API landscape turned up something that changes the shape of this idea more than the ESPN complaints do.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th scope="col">Platform</th><th scope="col">Official API</th><th scope="col">Documented</th><th scope="col">Writes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="plat">ESPN</td>
+            <td class="mark no">✕ none</td>
+            <td class="mark no">✕ reverse-engineered</td>
+            <td class="mark part">△ undocumented only</td>
+          </tr>
+          <tr>
+            <td class="plat">Yahoo</td>
+            <td class="mark yes">✓ OAuth 2.0</td>
+            <td class="mark yes">✓ yes</td>
+            <td class="mark no">✕ read access only</td>
+          </tr>
+          <tr>
+            <td class="plat">Sleeper</td>
+            <td class="mark yes">✓ public, no key</td>
+            <td class="mark yes">✓ yes</td>
+            <td class="mark no">✕ read-only</td>
+          </tr>
+        </tbody>
+        <caption>Fantasy platform API access, August 2026.</caption>
+      </table>
+    </div>
+
+    <p><strong>Every fantasy platform API is read-only.</strong> Yahoo states plainly that write access is not available. Sleeper is read-only by design. ESPN has no official API at all, and its write endpoints exist only as reverse-engineered POSTs to <code>lm-api-writes.fantasy.espn.com</code>.</p>
+    <p>So "manage your roster from my app" isn't really on the table anywhere. The defensible product is <strong>decision support and live experience</strong> — which is fortunately exactly where ESPN fails. You aren't competing on the ability to set a lineup. You're competing on being fast, correct, and <em>up</em> on Sunday.</p>
+    <p>Also worth flagging: Sleeper's API is free for <strong>non-commercial</strong> use. A paid product would need to sort out commercial terms rather than assume access.</p>
+  </section>
+
+  <section>
+    <h2>The thing that would sink this</h2>
+    <p>If the app is a hosted service that logs into ESPN on a user's behalf, it must collect that user's <code>espn_s2</code> and <code>SWID</code> cookies.</p>
+
+    <div class="callout">
+      <p class="label">Architecture-determining</p>
+      <p>Those are <strong>full session cookies, not scoped OAuth tokens.</strong> They grant access to the entire ESPN/Disney account — not a fantasy-only permission slip. There is no consent screen, no scope limiting, no revocation UI, and no way for a user to grant you <em>just</em> fantasy read access.</p>
+    </div>
+
+    <p>A SaaS holding thousands of those is holding keys to thousands of Disney accounts, with no way to limit blast radius. That's a serious security liability, a hard sell on the signup page — "paste your session cookie here" is a phishing pattern — and a standing target. It's a bigger threat to the business than ESPN changing its API.</p>
+  </section>
+
+  <section>
+    <h2>Architecture options</h2>
+    <div class="options">
+
+      <div class="opt pick">
+        <h3><span class="tag">A</span> Browser extension — the strong candidate</h3>
+        <p>Runs in the user's own browser, reuses their existing ESPN session, and <strong>never transmits credentials anywhere</strong>. The credential problem largely evaporates: there's nothing to store, breach, or ask for.</p>
+        <p>It also fits the actual pain. If ESPN's UI is slow and its live scoring falls over, an extension can render its own fast view over the same page, compute projections client-side, and stay useful during exactly the load spikes that break the native app.</p>
+        <p class="tradeoff"><b>Trade-offs</b>Distribution via extension stores, harder monetization, and no mobile — where much Sunday usage lives. Extensions also break on DOM changes.</p>
+      </div>
+
+      <div class="opt">
+        <h3><span class="tag">B</span> Multi-platform analytics, sanctioned sources first</h3>
+        <p>Build the core on <strong>Sleeper</strong> (public, documented) and <strong>Yahoo</strong> (official OAuth), where access is legitimate and stable. Treat ESPN as best-effort.</p>
+        <p class="tradeoff"><b>Trade-offs</b>ESPN has the largest user base, so leading with the clean-API platforms means starting where the pain is smaller. But the foundation is one nobody can revoke on a whim.</p>
+      </div>
+
+      <div class="opt">
+        <h3><span class="tag">C</span> Hosted ESPN companion — highest risk</h3>
+        <p>Server-side, stores user cookies. Best UX, easiest monetization, and the only option that gets you mobile cleanly. Also inherits the full credential liability above, plus total dependence on undocumented endpoints ESPN can change without notice and has no obligation to keep working.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Honest risk summary</h2>
+    <ul>
+      <li><strong>No API contract.</strong> ESPN's endpoints are unofficial and can change silently. No deprecation notice, no support channel, no SLA.</li>
+      <li><strong>Credential liability.</strong> Covered above. Architecture-determining.</li>
+      <li><strong>ToS exposure.</strong> Reverse-engineered access for personal use is one thing; a commercial product built on it is a materially different posture.</li>
+      <li><strong>Seasonality.</strong> Revenue concentrates in roughly five months with a huge draft-season spike. Churn is structural.</li>
+      <li><strong>Incumbents are free.</strong> ESPN, Yahoo, and Sleeper cost nothing. The bar for paid is high, and users tolerate a lot of jank in free products.</li>
+    </ul>
+  </section>
+
+  <div class="rec">
+    <p class="label">Recommendation</p>
+    <h2>Start with the browser extension, aimed at ESPN</h2>
+    <p>It targets the real, documented pain; it sidesteps the credential problem instead of managing it; it needs no permission from ESPN; and one person can build and ship it.</p>
+    <p>Most importantly it's a cheap way to find out whether people want this badly enough to install something — before taking on the cost and liability of a hosted service. If it gets traction, the natural expansions are mobile and the sanctioned multi-platform backend, funded by evidence rather than optimism.</p>
+  </div>
+
+  <section>
+    <h2>Relationship to the personal tool</h2>
+    <p>The draft assistant already underway is useful groundwork regardless. Building it surfaces which reads are actually available, what ESPN's data model looks like in practice, where the write endpoints are and what they cost to use, and how badly the live-draft gap hurts. That's real product research — and it doubles as a portfolio piece.</p>
+    <p>Ship the draft tool first. <strong>The draft is the week of 31 August 2026.</strong></p>
+  </section>
+
+  <section class="sources">
+    <h2>Sources</h2>
+    <ul>
+      <li><a href="https://www.profootballnetwork.com/wrong-espn-fantasy-football-app-calls-mount-fans-frustration/">ESPN fantasy app failures, Week 15 2025 — Pro Football Network</a></li>
+      <li><a href="https://www.phonearena.com/news/ESPNs-Fantasy-Sports-app-fails-on-the-first-Sunday-of-the-NFL-regular-season_id85308">ESPN fantasy app fails on opening Sunday — PhoneArena</a></li>
+      <li><a href="https://sports.yahoo.com/developer/">Yahoo Fantasy Sports API developer portal</a></li>
+      <li><a href="https://docs.sleeper.com/">Sleeper API documentation</a></li>
+      <li><a href="https://github.com/cwendt94/espn-api">cwendt94/espn-api</a></li>
+    </ul>
+  </section>
+
+  <footer>Concept brief · espn-ff-assistant · exploratory, no commitment made</footer>
+
+</div>
