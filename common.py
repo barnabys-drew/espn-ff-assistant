@@ -24,6 +24,40 @@ def load_env(path=".env"):
     return env
 
 
+def find_my_team(league, swid=None, team_id=None, strict=True):
+    """Locate the user's team by SWID, or by an explicit team_id override.
+
+    strict=False returns None instead of exiting, for callers that can degrade
+    gracefully — the draft board still works without knowing whose team is
+    whose, it just cannot report lineup gain.
+    """
+    if team_id is not None:
+        for team in league.teams:
+            if team.team_id == team_id:
+                return team
+        if not strict:
+            return None
+        sys.exit(f"No team with id {team_id}. Teams: "
+                 + ", ".join(f"{t.team_id}={t.team_name}" for t in league.teams))
+
+    def norm(value):
+        return str(value).strip().strip("{}").upper()
+
+    if swid:
+        want = norm(swid)
+        for team in league.teams:
+            for owner in (team.owners or []):
+                ids = owner.values() if isinstance(owner, dict) else [owner]
+                if any(norm(i) == want for i in ids):
+                    return team
+
+    if not strict:
+        return None
+    sys.exit("Could not tell which team is yours from the SWID in .env.\n"
+             "Re-run with --team-id, using one of:\n  "
+             + "\n  ".join(f"{t.team_id}  {t.team_name}" for t in league.teams))
+
+
 def connect(env=None, year=None):
     """Return a read-only espn-api League built from .env credentials.
 

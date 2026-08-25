@@ -65,6 +65,9 @@ scoring rules, roster slot counts, team list, and whether the draft has happened
 .venv/bin/python draft.py --pos RB   # one position, deeper
 .venv/bin/python draft.py --top 100  # a longer overall board
 .venv/bin/python draft.py --season 2025 --week 1   # a past season
+
+.venv/bin/python draft.py --watch        # draft night: redraw every 15s
+.venv/bin/python draft.py --watch 10 --need
 ```
 
 Writes `out/draft_board.json` and `out/cheatsheet.md`.
@@ -87,8 +90,45 @@ Two things worth knowing about the inputs:
   only as good as ESPN's projections — it is a value lens over them, not an
   independent forecast.
 - The pool is every undrafted player, so `draft.py` also works **mid-draft** as
-  a best-available sheet. Re-run it between picks; it flags how many picks are
-  already recorded.
+  a best-available sheet.
+
+#### On draft night
+
+`--watch` redraws the board on a timer until Ctrl-C, so it is already current
+when you glance at it rather than something you retype on the clock. Each pass
+prints how long the refresh took — the number that decides whether this is
+usable on a 60-second timer at all. It also names who was taken since the last
+redraw.
+
+Players already drafted are removed two ways: they should stop appearing in
+`free_agents()`, and they are subtracted explicitly from the live pick list.
+The second is a safety net for the first, and the board reports when it fires
+(`N drafted players were still listed as free agents`).
+
+Reading live picks needs `picks.py` rather than `espn-api`, whose own draft
+reader begins:
+
+```python
+if not data.get('draftDetail', {}).get('drafted'):
+    return
+```
+
+ESPN sets `drafted` when a draft **completes**, so `league.draft` is empty for
+the entire duration of a live draft — it works on a finished season, which is
+what makes the gap easy to miss. `picks.py` reads the same payload and parses
+picks regardless.
+
+With your team identified (automatically from your `SWID`, or `--team-id`) the
+board adds a **NEED** column: value over the player you would otherwise end up
+with in that slot, given what you have already drafted. It equals VOR while
+your roster is empty and diverges as slots fill — once your QB slot is locked,
+a backup QB is worth his full VOR to the league and exactly 0 to you, while a
+second TE keeps his value because he can still play flex. `--need` sorts by it.
+
+> Raw lineup gain — the metric the waiver tool uses — is wrong here, and shipped
+> broken for one commit. With every slot still empty, gain equals raw
+> projection, so it ranked six quarterbacks first: exactly the cross-position
+> comparison VOR exists to prevent. Measuring gain *over replacement* fixes it.
 
 ### 4. Work the waiver wire
 
@@ -222,9 +262,12 @@ dumps can carry league-member names.
 |---|---|
 | `login.py` | Headed browser login; harvests cookies into `.env` |
 | `probe.py` | Dumps league scoring, roster slots, teams |
-| `draft.py` | VOR draft board, tiers, and cheat sheet |
+| `draft.py` | VOR draft board, tiers, cheat sheet, live `--watch` board |
 | `waivers.py` | Waiver wire ranked by lineup gain |
-| `common.py` | `.env` loading and the read-only league connection |
-| `test_draft.py` | Unit tests for the valuation math |
+| `picks.py` | Live draft picks, which `espn-api` will not read |
+| `lineup.py` | Shared roster math: projections and the lineup optimiser |
+| `common.py` | `.env` loading, league connection, finding your team |
+| `test_draft.py` | Unit tests for the valuation math and the live board |
 | `test_waivers.py` | Unit tests for the lineup optimiser and gain ranking |
+| `test_picks.py` | Unit tests for live pick reading |
 | `.env.example` | Template; copy to `.env` |

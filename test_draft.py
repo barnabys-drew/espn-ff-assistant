@@ -5,9 +5,11 @@ Run:  .venv/bin/python -m unittest test_draft -v
 These cover the parts that decide the board's ordering — slot parsing, flex
 allocation, replacement level, tiering — without touching the network.
 """
+import types
 import unittest
 
 import draft
+import lineup
 
 
 def players(pos, projections):
@@ -138,6 +140,108 @@ class EndToEndOrdering(unittest.TestCase):
         qb1 = pool["QB"][0]["proj"] - levels["QB"]   # 340 - 330 = 10
         rb1 = pool["RB"][0]["proj"] - levels["RB"]   # 300 - 190 = 110
         self.assertGreater(rb1, qb1)
+
+
+class LiveBoard(unittest.TestCase):
+    """build() against a fake league mid-draft: pick filtering and NEED."""
+
+    SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "RB/WR/TE": 1, "BE": 6}
+
+    def setUp(self):
+        self.all = {}
+        self.pool = {
+            "QB": [self.mk(100 + i, f"QB{i}", "QB", 340 - i * 6, ["QB", "BE"])
+                   for i in range(1, 9)],
+            "RB": [self.mk(200 + i, f"RB{i}", "RB", 300 - i * 12)
+                   for i in range(1, 17)],
+            "WR": [self.mk(300 + i, f"WR{i}", "WR", 290 - i * 10)
+                   for i in range(1, 17)],
+            "TE": [self.mk(400 + i, f"TE{i}", "TE", 200 - i * 14,
+                           ["TE", "RB/WR/TE", "BE"]) for i in range(1, 9)],
+            "D/ST": [], "K": [],
+        }
+
+    def mk(self, pid, name, pos, proj, slots=None):
+        p = types.SimpleNamespace(
+            name=name, position=pos, proTeam="KC", playerId=pid,
+            stats={0: {"projected_points": proj}}, projected_total_points=proj,
+            eligibleSlots=slots or [pos, "RB/WR/TE", "BE"],
+            percent_owned=50.0, injuryStatus="ACTIVE")
+        self.all[pid] = p
+        return p
+
+    def league(self, taken, still_listed=()):
+        """`still_listed` are drafted players ESPN keeps returning as free."""
+        detail = {"drafted": False, "picks": [
+            {"playerId": pid, "teamId": tid, "roundId": 1,
+             "roundPickNumber": i + 1, "overallPickNumber": i + 1}
+            for i, (pid, tid) in enumerate(taken)]}
+        hidden = {pid for pid, _ in taken} - set(still_listed)
+        return types.SimpleNamespace(
+            year=2026, current_week=1,
+            settings=types.SimpleNamespace(
+                name="Mock", reg_season_count=17,
+                position_slot_counts=self.SLOTS),
+            teams=[types.SimpleNamespace(team_id=i, team_name=f"T{i}", owners=[])
+                   for i in range(1, 9)],
+            espn_request=types.SimpleNamespace(
+                get_league_draft=lambda: {"draftDetail": detail}),
+            free_agents=lambda week, size, position: [
+                p for p in self.pool[position] if p.playerId not in hidden],
+            player_info=lambda playerId: [self.all[i] for i in playerId])
+
+    def build(self, taken, still_listed=(), team_id=7):
+        return draft.build(self.league(taken, still_listed), 1,
+                           lineup.POOL_DEPTH, my_team_id=team_id, by_need=True)
+
+    def test_drafted_players_are_off_the_board(self):
+        data = self.build([(201, 1), (301, 2)])
+        names = {p["name"] for p in data["board"]}
+        self.assertNotIn("RB1", names)
+        self.assertNotIn("WR1", names)
+        self.assertEqual(data["picks_seen"], 2)
+
+    def test_a_pick_still_listed_as_a_free_agent_is_removed_anyway(self):
+        """The safety net: ESPN lag must not resurrect a drafted player."""
+        data = self.build([(201, 1), (301, 2)], still_listed=[201, 301])
+        self.assertNotIn("RB1", {p["name"] for p in data["board"]})
+        self.assertEqual(data["taken_but_still_listed"], 2)
+
+    def test_picks_are_seen_even_though_the_draft_is_not_complete(self):
+        data = self.build([(201, 1)])
+        self.assertFalse(data["draft_complete"])
+        self.assertEqual(data["picks_seen"], 1)
+
+    def test_need_equals_vor_before_you_have_drafted_anyone(self):
+        data = self.build([(201, 1)], team_id=7)  # team 7 has no picks
+        self.assertEqual(data["my_roster"], [])
+        self.assertNotIn("need", data["board"][0])
+        self.assertEqual(data["sorted_by"], "vor")
+
+    def test_need_falls_to_zero_at_a_filled_non_flex_slot(self):
+        data = self.build([(101, 7)])  # my only pick is QB1
+        qbs = [p for p in data["board"] if p["pos"] == "QB"]
+        self.assertGreater(qbs[0]["vor"], 0)   # league still values him
+        self.assertEqual(qbs[0]["need"], 0.0)  # but he cannot start for you
+
+    def test_a_flex_eligible_position_keeps_its_value_when_filled(self):
+        data = self.build([(401, 7)])  # my only pick is TE1
+        tes = [p for p in data["board"] if p["pos"] == "TE"]
+        self.assertGreater(tes[0]["need"], 0)  # a 2nd TE can still play flex
+
+    def test_need_does_not_rank_quarterbacks_above_everyone(self):
+        """The bug --need originally shipped with: raw gain equals projection."""
+        data = self.build([(201, 7), (302, 7)])
+        self.assertEqual(data["sorted_by"], "need")
+        self.assertNotEqual(data["board"][0]["pos"], "QB")
+
+    def test_the_board_is_still_built_when_pick_data_is_unavailable(self):
+        lg = self.league([])
+        lg.espn_request.get_league_draft = lambda: (_ for _ in ()).throw(
+            RuntimeError("ESPN down"))
+        data = draft.build(lg, 1, lineup.POOL_DEPTH, my_team_id=7)
+        self.assertEqual(data["picks_seen"], 0)
+        self.assertTrue(data["board"])
 
 
 if __name__ == "__main__":

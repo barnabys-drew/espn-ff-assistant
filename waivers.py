@@ -28,80 +28,9 @@ import json
 import os
 import sys
 
-from common import connect, load_env
-from draft import NON_STARTING_SLOTS, POSITIONS, POOL_DEPTH
-
-
-def starting_slots(settings):
-    """Per-team starting slots as {slot_name: count}.
-
-    Unlike the draft board, this is one team's lineup, so slot counts are not
-    multiplied by the size of the league.
-    """
-    slots = {}
-    for slot, count in (getattr(settings, "position_slot_counts", {}) or {}).items():
-        if count and slot not in NON_STARTING_SLOTS:
-            slots[slot] = int(count)
-    return slots
-
-
-def projection(player, weeks):
-    """Projected points for a player over `weeks`, or the season if weeks is None.
-
-    player.stats is keyed by scoring period, with week 0 holding season totals,
-    so a missing week means no projected game — a bye, or a season that has not
-    reached that week yet. Both correctly contribute nothing.
-    """
-    stats = getattr(player, "stats", None) or {}
-    if weeks is None:
-        return float(getattr(player, "projected_total_points", 0) or 0)
-    total = 0.0
-    for week in weeks:
-        total += float((stats.get(week) or {}).get("projected_points", 0) or 0)
-    return total
-
-
-def as_row(player, weeks):
-    """Flatten an espn-api Player into the plain dict the ranking works on."""
-    return {
-        "name": player.name,
-        "pos": player.position,
-        "team": player.proTeam,
-        "slots": [s for s in (getattr(player, "eligibleSlots", None) or [])],
-        "proj": round(projection(player, weeks), 1),
-        "owned": round(float(getattr(player, "percent_owned", 0) or 0), 1),
-        "injury": (getattr(player, "injuryStatus", "") or "").replace("ACTIVE", ""),
-        "player_id": getattr(player, "playerId", None),
-    }
-
-
-def best_lineup(rows, slots):
-    """Highest-scoring legal lineup from `rows`, as (total, starter_ids).
-
-    Slots are filled scarcest-first: a slot that few players are eligible for is
-    resolved before a slot that many are, so a flex does not greedily consume
-    the only player who could have filled a dedicated slot. This is the same
-    heuristic the draft board uses to allocate league-wide flex demand.
-
-    Eligibility comes from the API (eligibleSlots) rather than being inferred
-    from the position string, so odd slots — superflex, WR/TE, IDP — work
-    without this function knowing they exist.
-    """
-    openings = [slot for slot, count in slots.items() for _ in range(count)]
-    # Scarcity is measured against this specific player set, not in the
-    # abstract: a TE slot is scarce when you roster two tight ends.
-    openings.sort(key=lambda slot: sum(1 for r in rows if slot in r["slots"]))
-
-    used, total = set(), 0.0
-    for slot in openings:
-        eligible = [r for r in rows
-                    if slot in r["slots"] and id(r) not in used]
-        if not eligible:
-            continue
-        pick = max(eligible, key=lambda r: r["proj"])
-        used.add(id(pick))
-        total += pick["proj"]
-    return round(total, 1), used
+from common import connect, find_my_team, load_env
+from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup, projection,
+                    starting_slots)
 
 
 def rank_adds(roster, free_agents, slots, limit=None):
@@ -132,31 +61,6 @@ def rank_adds(roster, free_agents, slots, limit=None):
     for i, row in enumerate(ranked, 1):
         row["rank"] = i
     return ranked, base_total, drop
-
-
-def find_my_team(league, swid=None, team_id=None):
-    """Locate the user's team by SWID, or by an explicit --team-id override."""
-    if team_id is not None:
-        for team in league.teams:
-            if team.team_id == team_id:
-                return team
-        sys.exit(f"No team with id {team_id}. Teams: "
-                 + ", ".join(f"{t.team_id}={t.team_name}" for t in league.teams))
-
-    def norm(value):
-        return str(value).strip().strip("{}").upper()
-
-    if swid:
-        want = norm(swid)
-        for team in league.teams:
-            for owner in (team.owners or []):
-                ids = owner.values() if isinstance(owner, dict) else [owner]
-                if any(norm(i) == want for i in ids):
-                    return team
-
-    sys.exit("Could not tell which team is yours from the SWID in .env.\n"
-             "Re-run with --team-id, using one of:\n  "
-             + "\n  ".join(f"{t.team_id}  {t.team_name}" for t in league.teams))
 
 
 def scoring_weeks(league, week):
