@@ -58,18 +58,19 @@ def find_my_team(league, swid=None, team_id=None, strict=True):
              + "\n  ".join(f"{t.team_id}  {t.team_name}" for t in league.teams))
 
 
-def connect(env=None, year=None):
+def connect(env=None, year=None, league_id=None):
     """Return a read-only espn-api League built from .env credentials.
 
-    year overrides SEASON from .env. That override is what makes testing
-    against a completed past season possible without editing .env and having to
-    remember to put it back before a live draft.
+    year overrides SEASON from .env and league_id overrides LEAGUE_ID. Both
+    exist so a throwaway target -- a past season, a mock draft -- can be read
+    without editing .env and having to remember to put it back before a live
+    draft.
     """
     env = env or load_env()
     from espn_api.football import League
 
     return League(
-        league_id=int(env["LEAGUE_ID"]),
+        league_id=int(league_id or env["LEAGUE_ID"]),
         year=int(year or env.get("SEASON", 2026)),
         espn_s2=env["ESPN_S2"],
         swid=env["SWID"],

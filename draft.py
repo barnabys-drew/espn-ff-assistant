@@ -471,6 +471,9 @@ def main():
     ap.add_argument("--watch", type=int, nargs="?", const=15, metavar="SECS",
                     help="redraw every SECS seconds (default 15) until Ctrl-C")
     ap.add_argument("--week", type=int, help="scoring period (default: week 1)")
+    ap.add_argument("--league-id", type=int,
+                    help="read a different league than .env names — a mock "
+                         "draft, for instance")
     ap.add_argument("--season", type=int,
                     help="season to build for (default: SEASON from .env). A "
                          "completed season usually wants --week 1 too, since "
@@ -480,7 +483,7 @@ def main():
     args = ap.parse_args()
 
     env = load_env()
-    league = connect(env, year=args.season)
+    league = connect(env, year=args.season, league_id=args.league_id)
     week = args.week or max(1, getattr(league, "current_week", 1) or 1)
     depth = ({pos: args.depth for pos in POSITIONS} if args.depth else POOL_DEPTH)
 
