@@ -103,6 +103,8 @@ class Board:
         # would be advice that cannot be taken -- and an armed picker would
         # fail in the room for a reason nothing in the log would explain.
         full = rosterlimits.full_positions(my_rows, self.limits)
+        # Beyond the league's hard caps, drop positions not worth more depth.
+        full |= rosterlimits.over_bench_target(my_rows, self.slots)
         if full:
             board = [r for r in board if r["pos"] not in full]
 

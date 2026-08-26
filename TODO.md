@@ -59,11 +59,16 @@ the lineup outranks any bench stash; once starters are full every candidate
 lands on `NEED 0.0` together and the tiebreak takes over. Simulated over the
 same seven bench picks: **RB 8 / WR 4 became RB 4 / WR 4 / QB 3 / TE 3.**
 
-Residual worth watching: three quarterbacks is still more than a person would
-take. QB VOR stays high because the position's replacement level is shallow,
-and the depth factor discounts it but not enough to overcome that. Backup
-quarterbacks past the second are close to worthless in a one-QB league, and
-neither VOR nor the depth factor knows it.
+Then bench targets per position, because three quarterbacks was still more than
+a person would take and no multiplier was going to fix it. VOR asks the wrong
+question about a bench slot: it measures against replacement at the *starting*
+threshold, while a bench player's value is how often he plays and how easily he
+could be replaced from waivers. In a one-QB league a backup plays on a bye and
+an injury, and 32 teams start a quarterback against ~15 rostered, so the wire is
+permanently stocked — unplayable and unnecessary at once. So QB and TE get one
+backup, K and D/ST none, and RB/WR stay unconstrained. Final simulation:
+**RB 5 / WR 5 / QB 2 / TE 2 / K 1 / D-ST 1**, which is what a good drafter
+builds.
 
 The diagnosis that led here:
 

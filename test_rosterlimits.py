@@ -63,3 +63,39 @@ class FullPositions(unittest.TestCase):
     def test_counts_tallies_by_position(self):
         self.assertEqual(rosterlimits.counts(self.roster(RB=2, WR=3)),
                          {"RB": 2, "WR": 3})
+
+
+class BenchTargets(unittest.TestCase):
+    """Depth is only worth having where it will play and cannot be streamed."""
+
+    SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "RB/WR/TE": 1,
+             "K": 1, "D/ST": 1}
+
+    def roster(self, **by_pos):
+        return [{"pos": p} for p, n in by_pos.items() for _ in range(n)]
+
+    def test_one_backup_quarterback_is_the_allowance(self):
+        self.assertEqual(rosterlimits.bench_capacity("QB", self.SLOTS), 2)
+
+    def test_kickers_and_defences_get_no_backup(self):
+        self.assertEqual(rosterlimits.bench_capacity("K", self.SLOTS), 1)
+        self.assertEqual(rosterlimits.bench_capacity("D/ST", self.SLOTS), 1)
+
+    def test_running_backs_and_receivers_are_unconstrained(self):
+        """Depth there is what a bench is actually for."""
+        self.assertIsNone(rosterlimits.bench_capacity("RB", self.SLOTS))
+        self.assertIsNone(rosterlimits.bench_capacity("WR", self.SLOTS))
+
+    def test_a_second_quarterback_is_allowed_and_a_third_is_not(self):
+        self.assertNotIn("QB", rosterlimits.over_bench_target(
+            self.roster(QB=1), self.SLOTS))
+        self.assertIn("QB", rosterlimits.over_bench_target(
+            self.roster(QB=2), self.SLOTS))
+
+    def test_a_second_kicker_is_not_allowed(self):
+        self.assertIn("K", rosterlimits.over_bench_target(
+            self.roster(K=1), self.SLOTS))
+
+    def test_eight_running_backs_never_trip_the_target(self):
+        self.assertEqual(rosterlimits.over_bench_target(
+            self.roster(RB=8, WR=8), self.SLOTS), set())

@@ -51,3 +51,45 @@ def full_positions(rows, limits):
     """Positions already at their cap, which cannot be drafted again."""
     tally = counts(rows)
     return {pos for pos, cap in limits.items() if tally.get(pos, 0) >= cap}
+
+
+# How many players past your starters are worth rostering at each position.
+#
+# Not a league rule -- a strategy constraint, and the one place here where a
+# judgement is encoded rather than derived. It exists because VOR asks the
+# wrong question about a bench slot. VOR measures a player against replacement
+# at the *starting* threshold; a bench player's value is how often he actually
+# plays and how easily he could be replaced from waivers.
+#
+# In a one-QB league you start one quarterback, so a backup plays on a bye and
+# on an injury -- roughly two weeks. Meanwhile 32 teams start a quarterback
+# against maybe 15 rostered, so the wire is permanently stocked. A third
+# quarterback is unplayable and unnecessary at once. Kickers and defences are
+# worse: stream them. Running backs and receivers invert it -- more starting
+# slots, higher injury rates, a genuinely picked-over wire -- so depth there is
+# what a bench is for.
+BENCH_TARGETS = {"QB": 1, "TE": 1, "K": 0, "D/ST": 0}
+
+
+def bench_capacity(pos, slots):
+    """Total worth rostering at a position: its starting slots plus a bench allowance.
+
+    Positions with no entry in BENCH_TARGETS -- running backs and receivers --
+    are unconstrained, which is deliberate.
+    """
+    starting = sum(count for slot, count in (slots or {}).items()
+                   if slot == pos)
+    if pos not in BENCH_TARGETS:
+        return None
+    return starting + BENCH_TARGETS[pos]
+
+
+def over_bench_target(rows, slots):
+    """Positions already holding as many as they are worth holding."""
+    tally = counts(rows)
+    full = set()
+    for pos in BENCH_TARGETS:
+        cap = bench_capacity(pos, slots)
+        if cap is not None and tally.get(pos, 0) >= cap:
+            full.add(pos)
+    return full
