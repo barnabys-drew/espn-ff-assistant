@@ -265,6 +265,12 @@ will look authoritative whether or not they are better.
 
 ## Known and accepted
 
+- **Drafted mock leagues cannot be left.** ESPN only offers "Leave This
+  League" before a draft — verified against a completed league on the team,
+  members, settings and league-manager pages. Seven mock teams from testing
+  will sit on the account until ESPN retires them. `leaveleagues.py` exists and
+  works for the pre-draft case, and refuses the real league unconditionally.
+
 - **The socket carries no history.** A board started mid-draft has not seen
   earlier picks. Your own roster is re-seeded from the room, other teams' picks
   are not, and autopick's fall-through covers the risk. Mitigation is
