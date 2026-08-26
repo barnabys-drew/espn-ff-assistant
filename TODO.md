@@ -53,7 +53,14 @@ the tool, so it could recommend a ninth running back — advice that cannot be
 taken, and an armed picker attempting it would fail for a reason nothing in the
 log would explain. Positions at their cap now drop off the board.
 
-**5e. Bench construction is RB-heavy, and NEED is the reason.**
+**5e. ~~Bench construction is RB-heavy~~ — fixed.**
+NEED is now multiplied by a depth factor: once a position's starting slots are
+covered, the next player there only plays when somebody ahead of him cannot, so
+his value is his lineup gain times roughly the chance he ever starts. With the
+roster that draft actually built (7 RB, 1 WR), an eighth running back's NEED of
+40 becomes 6.7 while a second receiver's stays at 40. Early rounds are
+untouched — with two running backs the third still fills the flex and is not
+discounted. Originally:
 A full armed draft ended RB 8 / WR 4 / QB 1 / TE 1 / K 1 / D-ST 1 — the running
 back cap exactly, with five bench running backs. The starters were built
 correctly and quickly, but after that NEED keeps ranking marginal flex upgrades

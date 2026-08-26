@@ -25,7 +25,7 @@ import rosterlimits
 import schedule as schedule_mod
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
-                    gain_from_adding, starting_slots)
+                    depth_factor, gain_from_adding, starting_slots)
 from draft import (allocate_flex, assign_tiers, parse_slots,
                    replacement_levels)
 
@@ -124,7 +124,11 @@ class Board:
                     need -= r["bye_cost"]
                 else:
                     r["bye_cost"] = 0.0
-                r["need"] = round(need, 1)
+                # A player behind others at his position only plays when one
+                # of them cannot. Applied after the bye cost so both reflect
+                # how often he is actually in the lineup.
+                r["depth"] = round(depth_factor(r, my_rows, self.slots), 2)
+                r["need"] = round(need * r["depth"], 1)
             # Once a roster exists, NEED is the better ranking and the one the
             # board prints -- autopick takes rows[0], so the two must agree.
             # VOR would keep offering a fourth running back with the QB and TE

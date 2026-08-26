@@ -96,3 +96,37 @@ def gain_from_adding(roster, candidate, slots, base_total=None):
         base_total, _ = best_lineup(roster, slots)
     total, _ = best_lineup(roster + [candidate], slots)
     return round(total - base_total, 1)
+
+
+def slot_capacity(row, slots):
+    """How many of your starting slots this player's position can fill.
+
+    Read off the API's eligibleSlots, so a running back counts against RB *and*
+    the flex, while a quarterback counts only against QB unless the league runs
+    a superflex.
+    """
+    return sum(count for slot, count in (slots or {}).items()
+               if slot in (row.get("slots") or []))
+
+
+def depth_factor(row, roster, slots):
+    """Discount for a player behind others at his own position.
+
+    Once a position's starting slots are covered, the next player there only
+    plays when somebody ahead of him does not — injury, bye, a bad matchup. So
+    his value is not his lineup gain, it is that gain times roughly the chance
+    he ever starts, which falls as the queue in front of him grows.
+
+    Without this a board keeps taking marginal flex upgrades: a
+    replacement-level running back is worth fractionally more to a flex than a
+    receiver is, so it will draft an eighth running back over a second
+    receiver, which is internally consistent and still wrong.
+    """
+    capacity = slot_capacity(row, slots)
+    if not capacity:
+        return 1.0
+    # The candidate counts himself: with the starting slots already covered,
+    # he is the one who would be sitting.
+    have = sum(1 for r in roster if r.get("pos") == row.get("pos"))
+    surplus = max(0, have + 1 - capacity)
+    return 1.0 / (1.0 + surplus)

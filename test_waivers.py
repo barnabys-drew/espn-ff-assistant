@@ -10,6 +10,7 @@ outputs.
 import types
 import unittest
 
+import lineup
 import waivers
 
 
@@ -216,3 +217,53 @@ class ScoringWeeks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DepthDiscount(unittest.TestCase):
+    """A player behind others at his position only plays when one of them cannot.
+
+    Without this the board keeps taking marginal flex upgrades: a real armed
+    draft finished RB 8 / WR 4, the running-back cap exactly, with five bench
+    running backs.
+    """
+    SLOTS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "RB/WR/TE": 1}
+
+    def rb(self, name="RB", proj=200):
+        return row(name, "RB", proj, ["RB", "RB/WR/TE", "BE"])
+
+    def wr(self, name="WR", proj=200):
+        return row(name, "WR", proj, ["WR", "RB/WR/TE", "BE"])
+
+    def test_capacity_counts_the_flex_as_well_as_the_fixed_slot(self):
+        self.assertEqual(lineup.slot_capacity(self.rb(), self.SLOTS), 3)
+
+    def test_a_quarterback_counts_only_against_qb(self):
+        qb = row("QB1", "QB", 300, ["QB", "BE"])
+        self.assertEqual(lineup.slot_capacity(qb, self.SLOTS), 1)
+
+    def test_no_discount_while_slots_are_still_open(self):
+        roster = [self.rb("mine1"), self.rb("mine2")]   # capacity is 3
+        self.assertEqual(lineup.depth_factor(self.rb(), roster, self.SLOTS), 1.0)
+
+    def test_the_first_surplus_player_is_halved(self):
+        roster = [self.rb(f"mine{i}") for i in range(3)]  # capacity filled
+        self.assertAlmostEqual(
+            lineup.depth_factor(self.rb(), roster, self.SLOTS), 0.5)
+
+    def test_the_discount_deepens_with_the_queue(self):
+        roster = [self.rb(f"mine{i}") for i in range(7)]
+        self.assertAlmostEqual(
+            lineup.depth_factor(self.rb(), roster, self.SLOTS), 1 / 6)
+
+    def test_a_thin_position_is_not_discounted_while_a_deep_one_is(self):
+        """The eighth running back against the second receiver."""
+        roster = [self.rb(f"r{i}") for i in range(7)] + [self.wr("w1")]
+        deep = lineup.depth_factor(self.rb(), roster, self.SLOTS)
+        thin = lineup.depth_factor(self.wr(), roster, self.SLOTS)
+        self.assertLess(deep, thin)
+        self.assertEqual(thin, 1.0)
+
+    def test_a_player_eligible_for_no_starting_slot_is_left_alone(self):
+        bench_only = row("X", "RB", 100, ["BE"])
+        self.assertEqual(
+            lineup.depth_factor(bench_only, [], self.SLOTS), 1.0)
