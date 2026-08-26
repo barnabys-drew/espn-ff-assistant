@@ -53,7 +53,29 @@ the tool, so it could recommend a ninth running back — advice that cannot be
 taken, and an armed picker attempting it would fail for a reason nothing in the
 log would explain. Positions at their cap now drop off the board.
 
-**5e. Bench construction — fixed, with a caveat.**
+**5e. Bench construction — the real cause was a sign bug.**
+
+Three armed drafts finished RB 8 / WR 4. Two fixes missed before reproducing
+against the real end-state found it:
+
+```
+Dylan Laube    RB   VOR -54.2   depth 0.50   vor*depth  -27.1
+Devin Duvernay WR   VOR -84.8   depth 1.00   vor*depth  -84.8
+```
+
+Bench candidates sit **below** replacement level — that is what makes them
+bench candidates — so their VOR is negative. Multiplying a negative by 0.5
+makes it *larger*, so the depth discount was rewarding depth rather than
+penalising it: the more running backs held, the better the next one scored.
+Every synthetic test passed because they were built with positive-VOR players.
+
+`discounted()` now divides when the value is negative, so a discount costs
+whatever the sign. Verified against the real roster and pool: the bench now
+alternates WR/RB instead of taking six straight running backs.
+
+Still to confirm in a live draft rather than a reproduction.
+
+Earlier attempts, both kept because they are correct in themselves:
 Sorting is now `(NEED, VOR x depth)`. NEED still leads, so anyone who can crack
 the lineup outranks any bench stash; once starters are full every candidate
 lands on `NEED 0.0` together and the tiebreak takes over. Simulated over the

@@ -130,3 +130,18 @@ def depth_factor(row, roster, slots):
     have = sum(1 for r in roster if r.get("pos") == row.get("pos"))
     surplus = max(0, have + 1 - capacity)
     return 1.0 / (1.0 + surplus)
+
+
+def discounted(value, factor):
+    """Apply a depth factor so that it always costs, whatever the sign.
+
+    Multiplying is wrong for the case that matters. Bench candidates sit below
+    replacement level -- that is what makes them bench candidates -- so their
+    VOR is negative, and multiplying a negative number by 0.5 makes it larger.
+    The discount then rewards depth instead of penalising it: the more running
+    backs you hold, the better the next one scores. Three drafts finished
+    RB 8 / WR 4 on exactly this.
+    """
+    if factor <= 0:
+        return value
+    return value * factor if value >= 0 else value / factor

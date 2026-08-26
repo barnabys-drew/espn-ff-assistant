@@ -26,7 +26,8 @@ import rosterlimits
 import schedule as schedule_mod
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup,
-                    depth_factor, gain_from_adding, starting_slots)
+                    depth_factor, discounted, gain_from_adding,
+                    starting_slots)
 from draft import (allocate_flex, assign_tiers, parse_slots,
                    replacement_levels)
 
@@ -157,7 +158,8 @@ class Board:
             # deepest pool. Rounding NEED to one decimal is what lets the
             # tiebreak engage: every bench candidate lands on 0.0 together.
             board.sort(key=lambda r: (-r.get("need", 0.0),
-                                      -(r["vor"] * r.get("depth", 1.0))))
+                                      -discounted(r["vor"],
+                                                  r.get("depth", 1.0))))
         return board
 
 

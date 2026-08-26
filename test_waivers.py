@@ -267,3 +267,30 @@ class DepthDiscount(unittest.TestCase):
         bench_only = row("X", "RB", 100, ["BE"])
         self.assertEqual(
             lineup.depth_factor(bench_only, [], self.SLOTS), 1.0)
+
+
+class Discounting(unittest.TestCase):
+    """A discount has to cost regardless of sign.
+
+    Bench candidates sit below replacement — that is what makes them bench
+    candidates — so their VOR is negative, and multiplying a negative by 0.5
+    makes it larger. Three drafts finished RB 8 / WR 4 on exactly that.
+    """
+
+    def test_a_positive_value_is_reduced(self):
+        self.assertAlmostEqual(lineup.discounted(100.0, 0.5), 50.0)
+
+    def test_a_negative_value_is_made_worse_not_better(self):
+        self.assertAlmostEqual(lineup.discounted(-54.0, 0.5), -108.0)
+
+    def test_no_discount_leaves_either_sign_alone(self):
+        self.assertAlmostEqual(lineup.discounted(-85.0, 1.0), -85.0)
+        self.assertAlmostEqual(lineup.discounted(85.0, 1.0), 85.0)
+
+    def test_the_real_case_now_ranks_the_receiver_first(self):
+        rb = lineup.discounted(-54.2, 0.50)   # 4th RB, held 3
+        wr = lineup.discounted(-84.8, 1.00)   # 3rd WR, held 2
+        self.assertGreater(wr, rb)
+
+    def test_a_zero_factor_is_ignored_rather_than_dividing(self):
+        self.assertEqual(lineup.discounted(-10.0, 0.0), -10.0)
