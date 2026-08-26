@@ -152,7 +152,13 @@ panic on the clock.
 
 Ordered so each step is checkable before the next depends on it.
 
-**A. Average draft position.** The most direct attack on the stated goal, and
+**A. ~~Average draft position~~ — done.** ADP turned out to be in the
+`kona_player_info` payload `free_agents()` already requests, under
+`ownership.averageDraftPosition`; espn-api drops the field, so it is read
+from the raw response. The board shows ADP and a **WAIT** marker when a
+player should still be available at your next pick. Originally:
+
+The most direct attack on the stated goal, and
 it needs no modelling. If the board values a player at pick 20 and the room
 takes him at 35, wait and take someone else first — the gap between your
 valuation and the market *is* the edge, and it is measurable. Pairs naturally

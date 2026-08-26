@@ -17,6 +17,7 @@ import os
 import sys
 import time
 
+import adp as adp_mod
 import draftclock
 import draftpick
 import draftroom
@@ -44,8 +45,15 @@ class Board:
         weeks = int(getattr(league.settings, "reg_season_count", 0) or 17)
         self.byes = schedule_mod.fetch_bye_weeks(league, weeks)
         self.limits = rosterlimits.fetch_limits(league)
+        # Slot ids for QB/RB/WR/TE/D-ST/K, matching the pool we just pulled.
+        self.adp = adp_mod.fetch_adp(league, slot_ids=[0, 2, 4, 6, 16, 17])
+        for pid, info in self.adp.items():
+            if pid in self.by_id:
+                self.by_id[pid]["adp"] = info["adp"]
         print(f"  bye weeks for {len(self.byes)} pro teams; position caps: "
-              f"{self.limits or 'none published'}", flush=True)
+              f"{self.limits or 'none published'}; ADP for "
+              f"{sum(1 for r in self.by_id.values() if r.get('adp'))} players",
+              flush=True)
 
     def _load(self):
         print("Fetching the player pool once (the API cannot be trusted "
@@ -203,6 +211,7 @@ def render(board, state, rows, top, teams, upcoming=None):
                   + (f", then #{nxt[1]}" if len(nxt) > 1 else ""))
 
     pressure = tier_pressure(rows, picks_away)
+    render.picks_away = picks_away
     urgent = [f"{p} tier {i['tier']}: {i['left']} left"
               for p, i in sorted(pressure.items()) if i["at_risk"]]
     if urgent:
@@ -210,7 +219,7 @@ def render(board, state, rows, top, teams, upcoming=None):
     print()
 
     head = (f"{'PLAYER':<24}{'POS':<5}{'TM':<5}{'BYE':>6}{'PROJ':>8}"
-            f"{'VOR':>8}{'TIER':>6}")
+            f"{'VOR':>8}{'TIER':>6}{'ADP':>7}{'':>6}")
     print(head + (f"{'NEED':>8}" if show_need else ""))
     print("-" * (len(head) + (8 if show_need else 0)))
     for r in rows[:top]:
@@ -218,9 +227,13 @@ def render(board, state, rows, top, teams, upcoming=None):
         if r.get("bye"):
             bye = (f"{r['bye']}({r['bye_clash']})" if r.get("bye_clash")
                    else str(r["bye"]))
+        adp_val = r.get("adp")
+        wait = adp_mod.wait_verdict(adp_val, picks_away, len(state.picks) + 1)
         line = (f"{r['name'][:23]:<24}{r['pos']:<5}{r['team']:<5}"
                 f"{bye:>6}{r['proj']:>8.1f}{r['vor']:>+8.1f}"
-                f"{('T' + str(r.get('tier', '?'))):>6}")
+                f"{('T' + str(r.get('tier', '?'))):>6}"
+                f"{(f'{adp_val:.0f}' if adp_val else '-'):>7}"
+                f"{('  WAIT' if wait else ''):>6}")
         if show_need:
             line += f"{r.get('need', 0.0):>+8.1f}"
         print(line)
