@@ -283,6 +283,67 @@ the header strip instead.
 The player pool is fetched once at startup and maintained from socket picks
 rather than re-polled, because re-polling would actively make it worse.
 
+#### How it decides who to draft
+
+Every candidate is scored through the same chain. Each step exists because the
+step before it is wrong in a specific, observed way.
+
+**1. Projection.** ESPN's `projected_total_points`, already scored by your
+league's rules. Nothing is re-scored — [verified against the stat
+breakdown](#3-build-the-draft-board), not assumed.
+
+**2. Value over replacement.** A projection is only worth what it beats.
+Replacement level is the best player still unrostered once every team has
+filled its starting slots at that position, derived from *your* roster
+configuration and league size. This is what makes a quarterback's 340 and a
+running back's 280 comparable, and it is where most manual drafters are simply
+guessing.
+
+**3. Lineup gain.** Once you hold players, the question changes from "who is
+best" to "who improves my lineup". Gain is your best possible starting lineup
+with the player, minus without. It captures cascades: a receiver who displaces
+your WR2 also pushes that WR2 into the flex over someone worse, and both moves
+count.
+
+**4. Gain over replacement — NEED.** Raw gain is the wrong draft metric on its
+own: with slots empty it equals the raw projection, so it ranks quarterbacks
+first, which is the exact cross-position error VOR exists to prevent. So NEED
+is gain minus the gain a *replacement-level* player at that position would give
+— how much better this player is than whoever you would end up with there
+anyway. It equals VOR while your roster is empty and diverges as slots fill:
+once your QB slot is locked and there is no superflex, a backup quarterback is
+worth his full VOR to the league and exactly **0** to you.
+
+**5. Bye collision cost.** A shared bye is priced at roughly one starter-week,
+because that week the slot must be filled from the bench regardless of how good
+the player is the other sixteen. Enough to break a tie, not enough to pass on a
+genuinely better player — passing would be the worse mistake.
+
+**6. Depth discount.** A player behind others at his own position only plays
+when one of them cannot, so his value is his gain times roughly the chance he
+ever starts, which falls as the queue grows. Without this the board keeps
+taking marginal flex upgrades: a real draft finished RB 8 / WR 4, the
+running-back cap exactly, with five bench running backs.
+
+**7. Position caps.** Positions already at their league limit drop off the
+board entirely, since recommending them is advice that cannot be taken.
+
+Then three things that inform the pick without changing the score:
+
+- **Tiers** — where the drop to the next player is unusually large for that
+  position. Inside a tier, take need; between tiers, take the player.
+- **Pick distance** — how many picks until your turn, from the snake order.
+  Paired with tiers, this flags a position as **thin** when its tier will
+  likely empty before you pick again.
+- **ADP and WAIT** — where the market actually takes a player. If his ADP is
+  comfortably beyond your next pick he is marked `WAIT`, meaning take someone
+  who *will not* keep. A value board says who is best; only this says who will
+  still be there.
+
+Autopick, when armed, drafts the top row of that ranking at a configurable
+number of seconds on the clock — so what is printed and what is acted on are
+always the same list.
+
 #### Autopick
 
 `--autopick SECS` drafts your top NEED player when the clock drops below `SECS`
