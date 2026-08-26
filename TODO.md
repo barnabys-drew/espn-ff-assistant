@@ -137,6 +137,57 @@ projection model is worse than ESPN's, because it would be trusted.
 
 ---
 
+---
+
+## Post-draft build (the ~3 weeks between 2026-08-31 and week 1)
+
+**The goal is an edge over other drafters, not over the NFL.** Anyone in the
+league who watches more football will out-evaluate players. That is not
+winnable with a script, and building as though it were would build the wrong
+thing. What is winnable is *decision quality given the same public
+information*, because people convert it into worse decisions in predictable
+ways: they draft off ADP and gut rather than replacement level, they overweight
+what they watched, they forget byes and roster structure in round 11, and they
+panic on the clock.
+
+Ordered so each step is checkable before the next depends on it.
+
+**A. Average draft position.** The most direct attack on the stated goal, and
+it needs no modelling. If the board values a player at pick 20 and the room
+takes him at 35, wait and take someone else first — the gap between your
+valuation and the market *is* the edge, and it is measurable. Pairs naturally
+with tier pressure, which already knows how many picks until your turn:
+together they answer "can I afford to wait?" rather than just "who is best?".
+Sources: ESPN's own draft rankings via the API, or a public consensus ADP.
+
+**B. Data pipeline.** `nflverse` / `nflfastR` weekly usage — targets, air
+yards, snap share, carries, red-zone touches. Nothing downstream exists without
+it. Opportunity metrics are the specific place where numbers beat viewing
+hours: usage does not care how good a player looked.
+
+**C. Touchdown regression.** Regress touchdowns toward expected TDs given
+opportunity. The clearest exploit of the "watched more football" bias — a
+player who scored 14 on modest usage looks like a star to someone who watched
+him score them and like a regression candidate to a model.
+
+**D. Floor and ceiling** from historical week-to-week variance, so the board
+can finally distinguish a ceiling play from a floor play. VOR on a mean cannot.
+
+**E. In-season Bayesian updating**, once games start and there is evidence to
+update on. A, B, C and D are what make it possible — the priors and the
+ingestion have to exist before week 1 or the data has nowhere to land.
+
+### Validation is the point, not bookkeeping
+
+The three weeks before the season are usable precisely because a projection
+model can be tested without the season: build on 2024, project 2025, and
+compare against both what happened and what ESPN projected. If it does not beat
+ESPN there, it does not get used.
+
+This matters more than it sounds. The tool is currently honest about being a
+value lens over someone else's numbers. The moment it generates its own, they
+will look authoritative whether or not they are better.
+
 ## Known and accepted
 
 - **The socket carries no history.** A board started mid-draft has not seen
