@@ -141,7 +141,21 @@ class Board:
             # board prints -- autopick takes rows[0], so the two must agree.
             # VOR would keep offering a fourth running back with the QB and TE
             # slots still empty.
-            board.sort(key=lambda r: (-r.get("need", 0), -r["vor"]))
+            # NEED first, then VOR times the depth factor.
+            #
+            # NEED measures today's lineup gain, so once every starting slot is
+            # filled it is zero for every remaining candidate -- nobody can
+            # crack the lineup. Sorting on it alone then leaves bench order to
+            # residual noise, which is how a draft ended RB 8 / WR 4 with a
+            # kicker worth +2.9 outranking a running back worth +99.6.
+            #
+            # VOR keeps that distinction, and the depth factor makes each
+            # additional player at a position worth less than the last, so the
+            # bench balances instead of piling into whichever position has the
+            # deepest pool. Rounding NEED to one decimal is what lets the
+            # tiebreak engage: every bench candidate lands on 0.0 together.
+            board.sort(key=lambda r: (-r.get("need", 0.0),
+                                      -(r["vor"] * r.get("depth", 1.0))))
         return board
 
 

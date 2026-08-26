@@ -53,7 +53,19 @@ the tool, so it could recommend a ninth running back — advice that cannot be
 taken, and an armed picker attempting it would fail for a reason nothing in the
 log would explain. Positions at their cap now drop off the board.
 
-**5e. Bench construction — REOPENED. The depth discount does not fix it.**
+**5e. Bench construction — fixed, with a caveat.**
+Sorting is now `(NEED, VOR x depth)`. NEED still leads, so anyone who can crack
+the lineup outranks any bench stash; once starters are full every candidate
+lands on `NEED 0.0` together and the tiebreak takes over. Simulated over the
+same seven bench picks: **RB 8 / WR 4 became RB 4 / WR 4 / QB 3 / TE 3.**
+
+Residual worth watching: three quarterbacks is still more than a person would
+take. QB VOR stays high because the position's replacement level is shallow,
+and the depth factor discounts it but not enough to overcome that. Backup
+quarterbacks past the second are close to worthless in a one-QB league, and
+neither VOR nor the depth factor knows it.
+
+The diagnosis that led here:
 
 A second armed draft with the discount in place finished **RB 8 / WR 4 again**,
 identical to before. Reproduced against the real pool afterwards, and the cause
