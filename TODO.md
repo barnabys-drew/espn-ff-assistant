@@ -53,7 +53,37 @@ the tool, so it could recommend a ninth running back — advice that cannot be
 taken, and an armed picker attempting it would fail for a reason nothing in the
 log would explain. Positions at their cap now drop off the board.
 
-**5e. ~~Bench construction is RB-heavy~~ — fixed.**
+**5e. Bench construction — REOPENED. The depth discount does not fix it.**
+
+A second armed draft with the discount in place finished **RB 8 / WR 4 again**,
+identical to before. Reproduced against the real pool afterwards, and the cause
+is not what the discount addresses:
+
+```
+Jake Bates      K    VOR  +9.9   depth 0.50   NEED +2.9
+Tyjae Spears    RB   VOR +99.6   depth 1.00   NEED +0.0
+```
+
+Once every starting slot is filled, **NEED goes to ~0 for every bench
+candidate** — nobody can crack the lineup, so gain is zero. Multiplying zero by
+a depth factor is still zero, so the discount is inert on precisely the picks it
+was written for, and what decides bench order is residual noise: a kicker at
++2.9 outranking a running back worth +99.6.
+
+Worse, on that roster the factors pointed the wrong way. It held 2 RB (capacity
+3, so no discount) and 3 WR (capacity 3, so halved) — the discount was pushing
+*toward* running backs.
+
+The real conclusion: **NEED is the wrong metric for bench picks.** It measures
+today's lineup gain, and a bench player contributes nothing to today's lineup by
+definition. Once starters are covered the ranking should switch to something
+that still discriminates — VOR times the depth factor is the obvious candidate,
+since VOR keeps the +99.6 vs +9.9 distinction that NEED throws away.
+
+The discount itself is sound and tested; it is being applied to a number that
+has already collapsed.
+
+Originally:
 NEED is now multiplied by a depth factor: once a position's starting slots are
 covered, the next player there only plays when somebody ahead of him cannot, so
 his value is his lineup gain times roughly the chance he ever starts. With the
