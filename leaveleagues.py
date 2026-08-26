@@ -13,9 +13,10 @@ not self-service, so this is only useful for a mock joined and abandoned before
 its draft. Left in place for exactly that. That makes it the only genuinely destructive thing in the repo,
 and it is built to fail closed:
 
-  * PROTECTED league ids are refused unconditionally, in code rather than by
-    being left off a list someone passes in. Leaving the real league by
-    accident is the one failure here that would actually matter.
+  * The league named by LEAGUE_ID in .env is refused unconditionally, rather
+    than relying on a caller to leave it off a list. Leaving the real league
+    by accident is the one failure here that would actually matter, and if
+    that id cannot be read the tool refuses everything.
   * Dry run is the default; --confirm is required to click anything.
   * A league whose leave control cannot be found is skipped and reported, not
     forced through some other path.
@@ -25,8 +26,19 @@ import sys
 
 from common import load_env
 
-# Never leave these, whatever is asked. 123456 is the real 2026 league.
-PROTECTED = {123456}
+def protected_ids(env=None):
+    """League ids this tool refuses to touch, whatever it is asked.
+
+    Read from .env rather than hardcoded, so the real league is named in one
+    place that is already gitignored instead of committed into source.
+    """
+    env = env or load_env()
+    try:
+        return {int(env["LEAGUE_ID"])}
+    except (KeyError, TypeError, ValueError):
+        # Unreadable LEAGUE_ID means we cannot tell which league to protect,
+        # and refusing everything is the safe way to be wrong.
+        return None
 
 LEAVE_LINK_TEXTS = ["Leave This League", "Leave League", "Leave this league"]
 CONFIRM_TEXTS = ["Leave", "Yes", "Confirm", "OK"]
@@ -50,10 +62,10 @@ def find_leave_control(page):
     return None
 
 
-def leave_one(page, league_id, year, dry_run=True):
+def leave_one(page, league_id, year, protected, dry_run=True):
     """Try to leave one league. Returns (ok, message)."""
-    if league_id in PROTECTED:
-        return False, "PROTECTED — refusing"
+    if protected is None or league_id in protected:
+        return False, "protected — refusing"
 
     for template in LEAGUE_URLS:
         url = template.format(lid=league_id, year=year)
@@ -94,14 +106,17 @@ def main():
     ap.add_argument("--season", type=int, default=2026)
     args = ap.parse_args()
 
-    targets = [i for i in args.league_ids if i not in PROTECTED]
-    refused = [i for i in args.league_ids if i in PROTECTED]
-    for i in refused:
-        print(f"REFUSING {i}: protected", flush=True)
+    env = load_env()
+    protected = protected_ids(env)
+    if protected is None:
+        sys.exit("Cannot read LEAGUE_ID from .env, so cannot tell which league "
+                 "to protect. Refusing to leave anything.")
+    targets = [i for i in args.league_ids if i not in protected]
+    for i in args.league_ids:
+        if i in protected:
+            print(f"REFUSING {i}: protected", flush=True)
     if not targets:
         sys.exit("Nothing to do.")
-
-    load_env()          # fail early if credentials are missing
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         ctx = pw.chromium.launch_persistent_context(
@@ -109,7 +124,8 @@ def main():
             args=["--disable-blink-features=AutomationControlled"])
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         for lid in targets:
-            ok, msg = leave_one(page, lid, args.season, dry_run=not args.confirm)
+            ok, msg = leave_one(page, lid, args.season, protected,
+                                dry_run=not args.confirm)
             print(f"{lid}: {msg}", flush=True)
         ctx.close()
 
