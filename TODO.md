@@ -53,6 +53,16 @@ the tool, so it could recommend a ninth running back — advice that cannot be
 taken, and an armed picker attempting it would fail for a reason nothing in the
 log would explain. Positions at their cap now drop off the board.
 
+**5e. Bench construction is RB-heavy, and NEED is the reason.**
+A full armed draft ended RB 8 / WR 4 / QB 1 / TE 1 / K 1 / D-ST 1 — the running
+back cap exactly, with five bench running backs. The starters were built
+correctly and quickly, but after that NEED keeps ranking marginal flex upgrades
+above everything else, because a bench player's *lineup gain today* is the only
+thing it measures. A bench spot is really insurance and upside, which is a
+different question, and the model has no concept of it. Once starters are
+filled, bench candidates should be ranked on something else — scarcity, upside,
+or handcuff value to a starter you already own.
+
 **5d. Positional run detection.**
 When six of the last eight picks are running backs, the position is emptying
 faster than replacement level knows, because replacement only moves as players
