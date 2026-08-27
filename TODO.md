@@ -146,15 +146,43 @@ leave the pool. Real drafters react to runs. Not started.
 
 ## P1 — first weeks of the season
 
-**5. Re-check whether weekly projections appear once the season starts.**
-Pre-season only week 1 carries per-week projections, and `player_info` carries
-none. Until that changes, `waivers.py` "rest of season" is a one-week number —
-it says so, but the whole rest-of-season path is dormant until this is
-answered. Blocks 6 and 7.
+**5. ~~Re-check whether weekly projections appear once the season starts~~ —
+answered, and it uncovered a bug.**
+They do, and `player_info` was the wrong place to look: per-week projections
+come from **`box_scores(week)`**, which carries `projected_points`,
+`eligibleSlots` and `slot_position` for every rostered player. Verified against
+2025 weeks 10 and 15.
 
-**6. Start/sit report.**
-The lineup optimiser already exists; this is it run against your own roster,
-showing who to bench. Cheapest real feature left.
+Finding that turned up a silent bug in `waivers.py`. `team.roster` is built for
+**one** scoring period, so a rostered player's `stats` holds week 0 and the
+league's current week and nothing else — `as_row(player, [10])` returned `0.0`
+for a player projected 272.8 on the season. Free agents were fine, being fetched
+per week, so the two sides of the comparison came from different weeks and your
+own lineup always totalled `0.0`. Every free agent then "improved" a zero
+lineup by his own projection, `GAIN` became a copy of `PROJ`, and the
+displacement logic that justifies the whole metric never ran. Nothing errored.
+
+Fixed in `weekly.py`, which reads the roster per week from `box_scores`. On the
+2025 roster the week-10 lineup now reads 106.1 rather than 0.0, and 3 of 44
+free-agent running backs improve it rather than all of them. Pre-draft, where
+there are no rosters to score, both tools say so and `waivers.py` marks its
+fallback numbers as a ranking hint.
+
+Still true, and still stated in the output: ESPN publishes future weeks late, so
+a rest-of-season total covers only the weeks that actually carry projections.
+
+**6. ~~Start/sit report~~ — done.**
+`startsit.py`. The optimiser run against your own roster, comparing the lineup
+you have set with the best one available and listing the moves between them.
+Moves are reported as two lists rather than paired swaps, because a change
+cascades: a receiver promoted to WR slides the incumbent to flex and drops the
+flex's running back, which is three slot changes and two decisions.
+
+It separates a bye from an unpublished projection — both read 0.0 and mean
+opposite things — and flags a starter ruled `OUT` whose projection still looks
+healthy. If ESPN has not published the week, it says so instead of ranking
+noise. Verified against 2025 week 10: found a +1.0 improvement and correctly
+identified both Dallas players as byes.
 
 **7. ~~Bye handling on the live board~~ — done, and it mattered.**
 Autopick drafted two running backs onto the same week-13 bye, because the live
@@ -170,15 +198,48 @@ Still missing, and still blocked on ESPN publishing per-week projections.
 
 ## P2 — writes, post-draft
 
-**8. Read the openclaw fork's transaction payloads.**
-Specifically: does it cover waiver *claims* (scheduled, priority/FAAB) or only
-immediate free-agent adds? That is still unknown and it shapes everything else
-here. Cheap to answer, blocks 9 and 10.
+**8. ~~Read the openclaw fork's transaction payloads~~ — answered 2026-08-27.**
+Yes, it covers waiver claims, not just immediate adds. Read at
+`garavitgabriel/espn-fantasy-claude-openclaw@3b3ecda` (2026-08-20).
 
-**9. Port write support.**
+Everything goes through one envelope, `_build_transaction`, and one POST to
+`/transactions/`. Only `type`, `items` and a couple of extras change:
+
+| Operation | `type` | items |
+|---|---|---|
+| Set lineup | `ROSTER` | `LINEUP` + `fromLineupSlotId`/`toLineupSlotId` |
+| Add / drop | `FREEAGENT` | `ADD` + `toTeamId`, `DROP` + `fromTeamId` |
+| Waiver claim | `WAIVER` | same items, plus `bidAmount` |
+| Propose trade | `TRADE_PROPOSAL` | `TRADE` + both team ids, `expirationDate` |
+| Cancel trade | `TRADE_PROPOSAL` | `executionType: CANCEL` + `relatedTransactionId` |
+
+Two things this changes. **The payloads are not sport-specific** — nothing in
+any of them mentions baseball; the only football-shaped values are the lineup
+slot ids, which are already in espn-api's own `POSITION_MAP`, and the `ffl`
+slug, which `LEAGUE_WRITE_ENDPOINT` derives from the sport. So the port is
+copying methods onto the football `League`, not rewriting them. And
+`league_post`/`checkWriteStatus` are already sport-agnostic in
+`espn_api/requests/`.
+
+**FAAB does not apply here.** This league reports `faab: False` with
+`acquisition_budget 100` unused and waiver priority #1, so claims go in on
+priority and the fork's `bid_amount=None` path is the right one. Worth
+re-checking if the league settings change.
+
+Every method already takes `dry_run=True` and returns the exact dict it would
+POST, which is the confirm-token model item 9 wants, for free.
+
+**9. Port write support.** *Unblocked by 8, and smaller than it looked.*
 `league_post()` plus roster/lineup/trades, baseball `flb` → football `ffl`.
 Behind an env switch and a confirm token derived from the payload, so what is
-previewed is byte-for-byte what executes.
+previewed is byte-for-byte what executes — which the fork's `dry_run=True`
+already returns, so the confirm token can hash that dict directly.
+
+Order, by what is safe to get wrong: **lineup first** (it is reversible and
+`startsit.py` already computes exactly the `(playerId, fromSlot, toSlot)`
+triples `set_lineup_moves` wants), then add/drop, then waiver claims, then
+trade proposals. Nothing here should run without a live-fire test on a
+throwaway move first.
 
 **10. Trade evaluator, then proposals.**
 Lineup gain for both sides is read-only and useful on its own. Propose and

@@ -23,19 +23,25 @@ confirmations, no failures.
 each would raise your best starting lineup, which is the right question once you
 cannot roster everyone.
 
+**Sets the lineup each week.** `startsit.py` runs the same optimiser over your
+own roster and reports the gap between the lineup you have set and the best one
+available, with the moves that close it — separating a bye from a projection
+ESPN has not published, and flagging a starter who has been ruled out.
+
 Everything is **read-only except drafting**. No trades, no waiver claims, no
 lineup changes — see the roadmap.
 
 ## Where it is going
 
-**Near term** — finish the draft path and use it on 2026-08-31. Then, as the
-season starts: a start/sit report, and confirming whether ESPN publishes
-per-week projections once games begin, which currently blocks rest-of-season
-valuation.
+**Near term** — finish the draft path and use it on 2026-08-31. The in-season
+read tools are built and verified against a finished season; what is left is
+running them on a live roster, and a playoff-weeks column that still waits on
+ESPN publishing projections that far out.
 
-**Medium term** — writes. Trades and waiver claims need a port of the write
-support that exists in a baseball fork, behind an env switch and a confirm
-token. Accept/reject on trades may not be reachable at all.
+**Medium term** — writes. Trades, waiver claims, and lineup changes need a port
+of the write support that exists in a baseball fork, behind an env switch and a
+confirm token. The payloads turn out not to be sport-specific, so the port is
+smaller than it looked; accept/reject on trades may not be reachable at all.
 
 **Long term** — own projections. Everything here is a value lens over ESPN's
 numbers and never questions them; generating better ones means Bayesian
@@ -234,8 +240,48 @@ print the league's teams and ask for `--team-id`.
 Injured players are flagged, not filtered — `QUE`/`OUT` shows in the row and the
 call is yours.
 
+Your own roster is read one week at a time from `box_scores()`, not from
+`team.roster`. This is not a stylistic choice: see *Where the weekly numbers
+come from* below, because reading it the obvious way silently breaks the
+ranking.
 
-### 5. Draft night: the live board
+
+### 5. Set your lineup
+
+```bash
+.venv/bin/python startsit.py                        # the current week
+.venv/bin/python startsit.py --week 5
+.venv/bin/python startsit.py --season 2025 --week 10  # a finished week
+```
+
+Writes `out/startsit.json`.
+
+The same optimiser the draft board and waiver wire rank on, pointed at your own
+roster, so "best lineup" means the same thing everywhere. What is new is the
+comparison: your best legal lineup against the lineup you have actually set.
+That difference is the only number that says whether to do anything at all, and
+it comes with the moves that close it.
+
+Moves are reported as *who comes out* and *who goes in*, not as paired swaps,
+because fixing a lineup is rarely one-for-one. Promoting a receiver into a WR
+slot can slide the incumbent into the flex and push the flex's running back to
+the bench — three players change slots, two of them are decisions, and pairing
+them up would invent a correspondence that does not exist.
+
+Two checks a projection column cannot make on its own:
+
+- **A bye is distinguished from an unpublished projection.** Both read 0.0 and
+  they mean opposite things: one is settled, the other means come back later.
+  Byes come from the pro schedule, so `BYE` and `no proj` are separate notes.
+- **A starter listed `OUT` is called out even when his projection still looks
+  healthy.** ESPN is slow to zero those, and an unnoticed `OUT` in your flex is
+  the cheapest way there is to lose a week.
+
+If ESPN has not published the week yet, every lineup ties at 0.0 and the report
+says so instead of ranking noise.
+
+
+### 6. Draft night: the live board
 
 ```bash
 .venv/bin/python livedraft.py --league-id <ID>              # board only
@@ -378,6 +424,49 @@ other teams' earlier picks are not — the board says so rather than looking
 authoritative, and autopick's fall-through covers the risk. **Start the board
 before the draft** and this never arises.
 
+## Where the weekly numbers come from
+
+Every in-season tool here compares your roster against somebody else's, so both
+sides have to be read for the same week. That is harder than it sounds, and
+getting it wrong is silent.
+
+espn-api builds a team's roster for **one** scoring period — whichever the
+league is currently in. So a rostered player's `stats` carries week 0 (the
+season total) and that single week, and nothing else:
+
+```python
+>>> henry.stats.keys()
+dict_keys([0, 18])
+>>> lineup.as_row(henry, [10])["proj"]
+0.0          # week 10, from a player projected 272.8 on the season
+```
+
+Free agents do not have this problem, because `free_agents(week=N)` is fetched
+for that week. So the two halves of the waiver comparison were being read from
+different weeks, and the roster half was always zero.
+
+That produces a tool that looks like it works. Your best lineup projects `0.0`,
+so every free agent "improves" it by his own projection, `GAIN` becomes a copy
+of `PROJ`, and the displacement logic — the entire reason to rank by lineup gain
+rather than by points — never runs. Nothing errors and no number looks obviously
+wrong unless you already know your lineup is not worth zero.
+
+`box_scores(week)` is the fix, and it is what `weekly.py` wraps. It returns each
+rostered player with that week's `projected_points` and `eligibleSlots`, and it
+carries `slot_position` — the slot you actually have the player in — which is
+what makes a start/sit report possible at all. It costs one request per week, so
+a rest-of-season figure is fourteen round trips and the tools print progress.
+
+Two consequences worth knowing:
+
+- **Before the draft there are no rosters to score**, so `box_scores()` raises
+  from inside espn-api. Both tools catch that, say so plainly, and carry on;
+  `waivers.py` falls back to season totals and marks its `GAIN` column as a
+  ranking hint rather than a points figure.
+- **ESPN publishes future weeks late and unevenly.** A fourteen-week total built
+  from two weeks of data is a rest-of-season number in name only, so the report
+  states how many of the weeks it asked for actually carried projections.
+
 ## Tests
 
 ```bash
@@ -514,6 +603,8 @@ cannot.
 | `probe.py` | Dumps league scoring, roster slots, teams |
 | `draft.py` | VOR draft board, tiers, cheat sheet, live `--watch` board |
 | `waivers.py` | Waiver wire ranked by lineup gain |
+| `startsit.py` | Best legal lineup for a week, and the moves to reach it |
+| `weekly.py` | Per-week roster projections, which `team.roster` cannot give |
 | `livedraft.py` | Draft-night board driven by the draft room websocket |
 | `draftsocket.py` | The live draft protocol, and draft state |
 | `draftroom.py` | Reading roster and header state out of the room's DOM |
@@ -529,4 +620,6 @@ cannot.
 | `test_draftsocket.py` | Protocol tests, against frames captured live |
 | `test_draftroom.py` | Tests for DOM name matching |
 | `test_schedule.py` | Unit tests for bye and playoff week derivation |
+| `test_startsit.py` | Unit tests for lineup advice, byes, and cascades |
+| `test_weekly.py` | Unit tests for per-week reads, including the zero-roster bug |
 | `.env.example` | Template; copy to `.env` |
