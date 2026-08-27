@@ -14,6 +14,17 @@ POOL_DEPTH = {"QB": 60, "RB": 160, "WR": 190, "TE": 80, "D/ST": 32, "K": 32}
 # Roster slots that are not starting slots and so create no demand.
 NON_STARTING_SLOTS = {"BE", "IR", "ER", "Rookie", ""}
 
+# Injury values that mean "nothing is wrong". ESPN says ACTIVE for players and
+# NORMAL for a D/ST, and showing either as a status trains you to ignore the
+# column that is supposed to catch a genuine OUT.
+HEALTHY = {"ACTIVE", "NORMAL"}
+
+
+def injury_flag(player):
+    """A player's injury status, blank when there is nothing to report."""
+    status = (getattr(player, "injuryStatus", "") or "").strip().upper()
+    return "" if status in HEALTHY else status
+
 
 def starting_slots(settings):
     """One team's starting slots as {slot_name: count}.
@@ -53,13 +64,13 @@ def as_row(player, weeks):
         "slots": list(getattr(player, "eligibleSlots", None) or []),
         "proj": round(projection(player, weeks), 1),
         "owned": round(float(getattr(player, "percent_owned", 0) or 0), 1),
-        "injury": (getattr(player, "injuryStatus", "") or "").replace("ACTIVE", ""),
+        "injury": injury_flag(player),
         "player_id": getattr(player, "playerId", None),
     }
 
 
-def best_lineup(rows, slots):
-    """Highest-scoring legal lineup from `rows`, as (total, starter_ids).
+def assign_lineup(rows, slots):
+    """Best legal lineup as [(slot, row or None)], one entry per opening.
 
     Slots are filled scarcest-first: a slot few players are eligible for is
     resolved before a slot many are, so a flex does not greedily consume the
@@ -68,20 +79,32 @@ def best_lineup(rows, slots):
     Eligibility comes from the API (eligibleSlots) rather than being inferred
     from the position string, so odd slots — superflex, WR/TE, IDP — work
     without this function knowing they exist.
+
+    A slot no eligible player can fill comes back paired with None rather than
+    being dropped. best_lineup only needs the total and does not care, but a
+    start/sit report has to be able to say "you have nobody for this slot",
+    which is a different statement from "this slot scores zero".
     """
     openings = [slot for slot, count in slots.items() for _ in range(count)]
     # Scarcity is measured against this specific player set, not in the
     # abstract: a TE slot is scarce when you roster two tight ends.
     openings.sort(key=lambda slot: sum(1 for r in rows if slot in r["slots"]))
 
-    used, total = set(), 0.0
+    used, assigned = set(), []
     for slot in openings:
         eligible = [r for r in rows if slot in r["slots"] and id(r) not in used]
-        if not eligible:
-            continue
-        pick = max(eligible, key=lambda r: r["proj"])
-        used.add(id(pick))
-        total += pick["proj"]
+        pick = max(eligible, key=lambda r: r["proj"]) if eligible else None
+        if pick is not None:
+            used.add(id(pick))
+        assigned.append((slot, pick))
+    return assigned
+
+
+def best_lineup(rows, slots):
+    """Highest-scoring legal lineup from `rows`, as (total, starter_ids)."""
+    assigned = assign_lineup(rows, slots)
+    total = sum(row["proj"] for _, row in assigned if row is not None)
+    used = {id(row) for _, row in assigned if row is not None}
     return round(total, 1), used
 
 

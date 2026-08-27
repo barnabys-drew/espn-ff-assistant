@@ -28,6 +28,7 @@ import json
 import os
 import sys
 
+import weekly
 from common import connect, find_my_team, load_env
 from lineup import (POOL_DEPTH, POSITIONS, as_row, best_lineup, projection,
                     starting_slots)
@@ -73,7 +74,20 @@ def scoring_weeks(league, week):
 
 
 def build(league, team, weeks, depth, only_pos, limit):
-    roster = [as_row(p, weeks) for p in team.roster]
+    # Not [as_row(p, weeks) for p in team.roster]: a rostered player's stats
+    # only ever carry week 0 and the league's current scoring period, so that
+    # projects your entire roster at 0.0 for any specific week. Every free
+    # agent then "improves" a 0.0 lineup by his own projection and the ranking
+    # collapses to raw points. weekly.py reads the same weeks the free agents
+    # are read for. See its docstring.
+    def note(week):
+        if len(weeks) > 1:
+            print(f"  reading week {week}...", flush=True)
+
+    roster, roster_weeks, roster_errors = weekly.roster_projections(
+        league, team, weeks, on_week=note)
+    if roster_errors:
+        roster = [as_row(p, weeks) for p in team.roster]
 
     free_agents, covered = [], set()
     for pos in ([only_pos] if only_pos else POSITIONS):
@@ -105,6 +119,8 @@ def build(league, team, weeks, depth, only_pos, limit):
         "waiver_rank": getattr(team, "waiver_rank", None),
         "free_agents_considered": len(free_agents),
         "weeks_with_data": sorted(covered),
+        "roster_weeks_read": roster_weeks,
+        "roster_errors": roster_errors,
         "adds": ranked,
     }
 
@@ -130,6 +146,11 @@ def report(data):
     print(f"Valuing over {window}.")
     print("=" * 88)
     print(f"Your best lineup as rostered: {data['lineup_total']:.1f} projected pts")
+    if data.get("roster_errors"):
+        print(f"! Could not read your roster per week — {data['roster_errors'][0]}. "
+              f"Fell back to season-total projections, which are NOT comparable "
+              f"to the per-week free agent numbers below. Treat GAIN as a "
+              f"ranking hint only.")
     if data["drop_candidate"]:
         d = data["drop_candidate"]
         print(f"Weakest bench player:         {d['name']} ({d['pos']}, "
