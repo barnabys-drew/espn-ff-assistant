@@ -229,22 +229,43 @@ re-checking if the league settings change.
 Every method already takes `dry_run=True` and returns the exact dict it would
 POST, which is the confirm-token model item 9 wants, for free.
 
-**9. Port write support.** *Unblocked by 8, and smaller than it looked.*
-`league_post()` plus roster/lineup/trades, baseball `flb` → football `ffl`.
-Behind an env switch and a confirm token derived from the payload, so what is
-previewed is byte-for-byte what executes — which the fork's `dry_run=True`
-already returns, so the confirm token can hash that dict directly.
+**9. ~~Port write support~~ — built 2026-08-27, unfired.**
+`manage.py`, over `transactions.py` (payloads, no I/O) and `espnwrite.py` (the
+one POST and its guards). Lineup, add, drop, waiver claim, trade proposal and
+cancellation. No fork or vendoring was needed in the end: the write API is the
+read endpoint on a different host, so espn-api's own endpoint is reused with
+`lm-api-reads` swapped for `lm-api-writes`, and its cookies are the credentials.
 
-Order, by what is safe to get wrong: **lineup first** (it is reversible and
-`startsit.py` already computes exactly the `(playerId, fromSlot, toSlot)`
-triples `set_lineup_moves` wants), then add/drop, then waiver claims, then
-trade proposals. Nothing here should run without a live-fire test on a
-throwaway move first.
+Safety is three gates, all of which have to clear every time: `ESPN_WRITES=1`
+in `.env`, a preview that always runs first and sends nothing, and a
+`--confirm` token that is a hash of the payload. Because the token is derived
+rather than remembered, the confirming run rebuilds the body from current data
+and re-derives it — so a roster that changed since the preview produces a
+different token and the write is refused. No `--force`, no `--yes`.
 
-**10. Trade evaluator, then proposals.**
-Lineup gain for both sides is read-only and useful on its own. Propose and
-cancel are reachable; **accept/reject are not** — those payloads were never
-captured upstream.
+Two things that had to be found by building it:
+
+- **espn-api's slot-name lookup is unusable for writes.** `POSITION_MAP`'s
+  name→id half is missing `BE`, `IR` and `RB/WR/TE`, and carries a `FLEX` key
+  for 23 that ESPN never returns. Those are exactly the slots a lineup change
+  moves between. `transactions.py` inverts the complete int→name half instead.
+- **A trade expiry taken to the second can never be confirmed.** It lands in
+  the payload the token hashes, so it differed between the preview and the
+  confirming run and the token never matched. Rounded to the end of the day.
+
+**Still unfired.** Nothing has been POSTed to a live league — the roster is
+empty until the draft, so there is nothing to move and no add is legal yet.
+Every payload is verified by shape against 2025 data and unit-tested field by
+field, but the first real send is still the first real send. Do a **lineup
+change** first: it is the only one that is reversible.
+
+**10. Trade evaluator.** *Proposals are built; the valuation is not.*
+`manage.py trade` proposes and cancels. What is still missing is the part that
+says whether a trade is **good**: lineup gain for both sides, which is
+read-only and useful on its own. **Accept/reject remain out of reach** — those
+payloads were never captured upstream, and guessing at the shape of a write
+that moves players between two rosters is not a reasonable thing to do to a
+league.
 
 ---
 

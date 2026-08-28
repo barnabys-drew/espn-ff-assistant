@@ -28,8 +28,13 @@ own roster and reports the gap between the lineup you have set and the best one
 available, with the moves that close it — separating a bye from a projection
 ESPN has not published, and flagging a starter who has been ruled out.
 
-Everything is **read-only except drafting**. No trades, no waiver claims, no
-lineup changes — see the roadmap.
+**Makes the move, once you have read it.** `manage.py` sets the lineup, adds,
+drops, claims off waivers and proposes trades. Every command previews the exact
+request it would send and stops; sending it takes a second run carrying a
+confirm token derived from that body, plus an env switch that is off by default.
+[How that works](#7-make-the-move).
+
+Everything else is **read-only**.
 
 ## Where it is going
 
@@ -38,10 +43,11 @@ read tools are built and verified against a finished season; what is left is
 running them on a live roster, and a playoff-weeks column that still waits on
 ESPN publishing projections that far out.
 
-**Medium term** — writes. Trades, waiver claims, and lineup changes need a port
-of the write support that exists in a baseball fork, behind an env switch and a
-confirm token. The payloads turn out not to be sport-specific, so the port is
-smaller than it looked; accept/reject on trades may not be reachable at all.
+**Medium term** — writes are built (`manage.py`) and every payload is tested,
+but nothing has been sent to a live league yet: the roster is empty until the
+draft. The first real move should be a lineup change, which is reversible.
+Accepting or rejecting somebody else's trade stays out until those payloads are
+captured from a real one.
 
 **Long term** — own projections. Everything here is a value lens over ESPN's
 numbers and never questions them; generating better ones means Bayesian
@@ -424,6 +430,64 @@ other teams' earlier picks are not — the board says so rather than looking
 authoritative, and autopick's fall-through covers the risk. **Start the board
 before the draft** and this never arises.
 
+### 7. Make the move
+
+Everything above reads. `manage.py` is the only thing here that changes a real
+league.
+
+```bash
+.venv/bin/python manage.py pending                    # what is already queued
+.venv/bin/python manage.py lineup                     # apply the start/sit lineup
+.venv/bin/python manage.py add "Some Guy" --drop "Other Guy"
+.venv/bin/python manage.py drop "Some Guy"
+.venv/bin/python manage.py claim "Some Guy" --drop "Other Guy"
+.venv/bin/python manage.py trade --with 4 --send "Mine" --receive "Theirs"
+.venv/bin/python manage.py cancel-trade <id>
+```
+
+espn-api cannot do any of this — every method in its requests layer is a `GET`.
+But the write API is the same league endpoint on a different host
+(`lm-api-reads` → `lm-api-writes`), and every mutation is one `POST` to
+`/transactions/` with the same envelope. So nothing is forked or vendored: the
+read endpoint espn-api already built is reused with the host swapped, and the
+cookies it is already holding are the credentials.
+
+**Three things stand between a payload and your league, every time.**
+
+1. `ESPN_WRITES=1` must be set in `.env`. Without it, previews still work and
+   sending is refused.
+2. Nothing executes on the first run. Every command prints the exact JSON body
+   it would send, and stops.
+3. Sending needs the confirm token from that preview: `--confirm <token>`.
+
+The token is a hash of the payload, which is what makes it worth anything. The
+confirming run rebuilds the payload from current data and re-derives the token,
+so if *anything* moved in between — a player claimed, a different drop chosen,
+the scoring period rolled over — the bodies differ, the tokens differ, and the
+write is refused rather than executing something you were never shown.
+
+There is no `--force` and no `--yes`. Accepting or rejecting somebody else's
+trade is absent on purpose: those payloads were never captured, and guessing at
+the shape of a write that moves players between two rosters is not a reasonable
+thing to do to a league.
+
+Names are resolved against the live league and must be unambiguous. `"Ty"` lists
+the three players it could mean and refuses; it does not pick one.
+
+Two details that bite:
+
+- **ESPN validates the final roster, not each step.** A swap is two `LINEUP`
+  items in one transaction, and a player who merely changes slot — an RB sliding
+  to flex to make room — has to be listed too, or the roster is briefly illegal
+  and the whole transaction is rejected. `manage.py lineup` works this out from
+  the optimiser's assignment.
+- **espn-api's slot-name lookup cannot be used.** `POSITION_MAP` is
+  bidirectional, but its name→id half is missing `BE`, `IR` and `RB/WR/TE`, and
+  carries a `FLEX` key for 23 that ESPN never returns — `eligibleSlots` and
+  `slot_position` both say `RB/WR/TE`. Those are precisely the slots a lineup
+  change moves players between, so `transactions.py` inverts the complete
+  int→name half instead.
+
 ## Where the weekly numbers come from
 
 Every in-season tool here compares your roster against somebody else's, so both
@@ -513,6 +577,15 @@ Two paths hold live credentials and are both gitignored:
 access to the whole ESPN/Disney account, not just fantasy. Treat them like a
 password. Neither path may ever be committed, and `out/` is gitignored too since
 dumps can carry league-member names.
+
+Since `manage.py` exists, those cookies can change a real league and not just
+read one. That is what `ESPN_WRITES` is for: leave it at `0`, and a leaked or
+mistakenly-run command still cannot move a player. It is a switch you turn on
+for a move you have already read, not a setting to leave on.
+
+Previews print the full request body, `memberId` — your SWID — included. That
+is deliberate, since the point is to show exactly what would be sent, but it
+means a preview is not something to paste into a chat or an issue.
 
 ## Roadmap
 
@@ -605,6 +678,9 @@ cannot.
 | `waivers.py` | Waiver wire ranked by lineup gain |
 | `startsit.py` | Best legal lineup for a week, and the moves to reach it |
 | `weekly.py` | Per-week roster projections, which `team.roster` cannot give |
+| `manage.py` | Roster moves: lineup, add, drop, claim, trade. The only writer |
+| `transactions.py` | Transaction payloads and the confirm token. No I/O |
+| `espnwrite.py` | The one POST, and the guard rails around it |
 | `livedraft.py` | Draft-night board driven by the draft room websocket |
 | `draftsocket.py` | The live draft protocol, and draft state |
 | `draftroom.py` | Reading roster and header state out of the room's DOM |
@@ -622,4 +698,6 @@ cannot.
 | `test_schedule.py` | Unit tests for bye and playoff week derivation |
 | `test_startsit.py` | Unit tests for lineup advice, byes, and cascades |
 | `test_weekly.py` | Unit tests for per-week reads, including the zero-roster bug |
+| `test_transactions.py` | Field-by-field tests of every payload ESPN accepts |
+| `test_espnwrite.py` | Tests that a refused write sends nothing |
 | `.env.example` | Template; copy to `.env` |
